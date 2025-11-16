@@ -1,0 +1,129 @@
+from flask import Flask
+from flask_cors import CORS
+from flask_jwt_extended import JWTManager
+from flask_bcrypt import Bcrypt
+from pymongo import MongoClient
+import paho.mqtt.client as mqtt
+from config import Config
+
+# Global instances
+mongo_client = None
+db = None
+jwt = JWTManager()
+bcrypt = Bcrypt()
+mqtt_client = mqtt.Client()
+
+def create_app():
+    app = Flask(__name__)
+    app.config.from_object(Config)
+    
+    # Initialize extensions
+    # CORS dengan konfigurasi yang lebih permisif untuk development
+    CORS(app, resources={
+        r"/api/*": {
+            "origins": "*",
+            "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+            "allow_headers": ["Content-Type", "Authorization"]
+        }
+    })
+    jwt.init_app(app)
+    bcrypt.init_app(app)
+    
+    # Initialize MongoDB
+    global mongo_client, db
+    try:
+        mongo_client = MongoClient(app.config['MONGO_URI'])
+        db = mongo_client.curtaincall
+        print("✅ MongoDB Connected successfully")
+    except Exception as e:
+        print(f"❌ MongoDB Connection failed: {e}")
+        db = create_dummy_db()
+    
+    # Initialize MQTT
+    setup_mqtt(app)
+    
+    # Register blueprints - Import inside function to avoid circular imports
+    register_blueprints(app)
+    
+    return app
+
+def create_dummy_db():
+    """Create dummy database for fallback"""
+    class DummyDB:
+        def get_collection(self, name):
+            return DummyCollection()
+    
+    class DummyCollection:
+        def find_one(self, *args, **kwargs): 
+            return None
+        def find(self, *args, **kwargs): 
+            return []
+        def update_one(self, *args, **kwargs): 
+            return type('obj', (object,), {'modified_count': 0})()
+        def insert_one(self, *args, **kwargs): 
+            return type('obj', (object,), {'inserted_id': None})()
+        def count_documents(self, *args, **kwargs): 
+            return 0
+        def update_many(self, *args, **kwargs):
+            return type('obj', (object,), {'modified_count': 0})()
+        def delete_many(self, *args, **kwargs):
+            return type('obj', (object,), {'deleted_count': 0})()
+    
+    return DummyDB()
+
+def setup_mqtt(app):
+    def on_connect(client, userdata, flags, rc):
+        if rc == 0:
+            print("✅ MQTT Connected successfully")
+            client.subscribe("/curtain/data")
+        else:
+            print(f"❌ MQTT Connection failed with code {rc}")
+    
+    def on_message(client, userdata, msg):
+        print(f"📨 MQTT Message received on {msg.topic}: {msg.payload.decode()}")
+        handle_mqtt_message(msg.topic, msg.payload.decode())
+    
+    mqtt_client.on_connect = on_connect
+    mqtt_client.on_message = on_message
+    
+    try:
+        mqtt_client.connect(
+            app.config['MQTT_BROKER_URL'],
+            app.config['MQTT_BROKER_PORT'],
+            app.config['MQTT_KEEPALIVE']
+        )
+        mqtt_client.loop_start()
+    except Exception as e:
+        print(f"❌ MQTT Connection error: {e}")
+
+def handle_mqtt_message(topic, message):
+    """Handle incoming MQTT messages from ESP32"""
+    try:
+        if topic == "/curtain/data":
+            from app.models.sensor_model import process_sensor_data
+            process_sensor_data(message)
+    except Exception as e:
+        print(f"❌ Error handling MQTT message: {e}")
+
+def register_blueprints(app):
+    """Register all blueprints"""
+    from app.routes.sensors import sensors_bp
+    from app.routes.control import control_bp
+    from app.routes.users import users_bp
+    from app.routes.notifications import notifications_bp
+    from app.routes.auto_mode_rules import auto_mode_rules_bp
+    
+    app.register_blueprint(sensors_bp, url_prefix=f"{app.config['API_PREFIX']}/sensors")
+    app.register_blueprint(control_bp, url_prefix=f"{app.config['API_PREFIX']}/control")
+    app.register_blueprint(users_bp, url_prefix=f"{app.config['API_PREFIX']}/users")
+    app.register_blueprint(notifications_bp, url_prefix=f"{app.config['API_PREFIX']}/notifications")
+    app.register_blueprint(auto_mode_rules_bp, url_prefix=f"{app.config['API_PREFIX']}/auto-mode")
+
+def get_db():
+    return db
+
+def get_mqtt_client():
+    return mqtt_client
+
+# Export bcrypt untuk digunakan di modul lain
+__all__ = ['bcrypt', 'get_db', 'get_mqtt_client']
