@@ -1,386 +1,432 @@
-import React, { useState, useEffect } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  RefreshControl,
-  Alert,
-  Dimensions,
-  TouchableOpacity,
-  Animated,
-  Platform,
-} from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, Text, StyleSheet, ScrollView, RefreshControl, Animated, TouchableOpacity, Alert } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useSensor } from '../contexts/SensorContext';
+import { useControl } from '../contexts/ControlContext';
+import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
-import { sensorAPI } from '../_services/api';
-import { SensorData } from '../../types';
-
-const { width } = Dimensions.get('window');
-const CARD_WIDTH = (width - 48) / 2;
 
 export default function DashboardScreen() {
-  const [sensorData, setSensorData] = useState<SensorData | null>(null);
-  const [refreshing, setRefreshing] = useState(false);
-  const [lastUpdate, setLastUpdate] = useState<string>('');
-  const [fadeAnim] = useState(new Animated.Value(0));
+  const { sensorData, loading, refreshData } = useSensor();
+  const { sendCommand } = useControl();
+  const router = useRouter();
+  const insets = useSafeAreaInsets();
+  const fadeAnim = new Animated.Value(1);
+  const [quickCloseLoading, setQuickCloseLoading] = useState(false);
+  const [quickOpenLoading, setQuickOpenLoading] = useState(false);
 
-  const fetchSensorData = async () => {
+  useEffect(() => {
+    // Set initial fade animation only once on mount
+    Animated.timing(fadeAnim, {
+      toValue: 1,
+      duration: 600,
+      useNativeDriver: true,
+    }).start();
+  }, []);
+
+  const handleQuickClose = async () => {
+    if (sensorData?.posisi === 'Tertutup') {
+      Alert.alert('Info', 'Curtain is already closed');
+      return;
+    }
+
+    setQuickCloseLoading(true);
     try {
-      const data = await sensorAPI.getLatestData();
-      setSensorData(data);
-      setLastUpdate(new Date().toLocaleTimeString('id-ID', {
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit'
-      }));
+      await sendCommand('manual', 'close');
       
-      // Fade in animation
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 500,
-        useNativeDriver: true,
-      }).start();
-    } catch (error) {
-      console.error('Error fetching sensor data:', error);
-      Alert.alert('Error', 'Gagal mengambil data sensor');
+      // Refresh data after successful command
+      setTimeout(() => {
+        refreshData();
+      }, 1000);
+      
+      Alert.alert(
+        '✅ Success',
+        'Curtain closing command sent',
+        [{ text: 'OK', style: 'default' }]
+      );
+    } catch (error: any) {
+      Alert.alert(
+        '❌ Error',
+        error.response?.data?.error || 'Failed to send close command',
+        [{ text: 'OK', style: 'cancel' }]
+      );
+    } finally {
+      setQuickCloseLoading(false);
     }
   };
 
-  const onRefresh = async () => {
-    setRefreshing(true);
-    await fetchSensorData();
-    setRefreshing(false);
+  const handleQuickOpen = async () => {
+    if (sensorData?.posisi === 'Terbuka') {
+      Alert.alert('Info', 'Curtain is already open');
+      return;
+    }
+
+    setQuickOpenLoading(true);
+    try {
+      await sendCommand('manual', 'open');
+      
+      // Refresh data after successful command
+      setTimeout(() => {
+        refreshData();
+      }, 1000);
+      
+      Alert.alert(
+        '✅ Success',
+        'Curtain opening command sent',
+        [{ text: 'OK', style: 'default' }]
+      );
+    } catch (error: any) {
+      Alert.alert(
+        '❌ Error',
+        error.response?.data?.error || 'Failed to send open command',
+        [{ text: 'OK', style: 'cancel' }]
+      );
+    } finally {
+      setQuickOpenLoading(false);
+    }
   };
 
-  useEffect(() => {
-    fetchSensorData();
-    const interval = setInterval(fetchSensorData, 5000);
-    return () => clearInterval(interval);
-  }, []);
-
-  const getTemperatureColor = (temp: number) => {
-    if (temp < 20) return ['#3B82F6', '#60A5FA']; // Cold - Blue
-    if (temp < 28) return ['#10B981', '#34D399']; // Normal - Green
-    if (temp < 35) return ['#F59E0B', '#FBBF24']; // Warm - Orange
-    return ['#EF4444', '#F87171']; // Hot - Red
+  const handleSettings = () => {
+    router.push('/(tabs)/control');
   };
 
-  const getHumidityColor = (humidity: number) => {
-    if (humidity < 40) return ['#F59E0B', '#FBBF24']; // Low - Orange
-    if (humidity < 70) return ['#3B82F6', '#60A5FA']; // Normal - Blue
-    return ['#8B5CF6', '#A78BFA']; // High - Purple
-  };
+  const StatusCard = ({ title, value, unit, icon, colors, trend }: any) => (
+    <Animated.View style={[styles.card, { opacity: fadeAnim }]}>
+      <LinearGradient
+        colors={colors || ['#667eea', '#764ba2']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={styles.cardGradient}
+      >
+        <View style={styles.cardHeader}>
+          <Text style={styles.cardTitle}>{title}</Text>
+          {trend && (
+            <View style={styles.trendBadge}>
+              <Text style={styles.trendText}>{trend}</Text>
+            </View>
+          )}
+        </View>
+        <View style={styles.cardValueContainer}>
+          <Text style={styles.cardValue}>{value}</Text>
+          {unit && <Text style={styles.cardUnit}>{unit}</Text>}
+        </View>
+        <View style={styles.cardIcon}>
+          <Text style={styles.iconText}>{icon}</Text>
+        </View>
+      </LinearGradient>
+    </Animated.View>
+  );
 
-  const getLightColor = (light: number) => {
-    if (light < 200) return ['#6366F1', '#818CF8']; // Dark - Indigo
-    if (light < 500) return ['#F59E0B', '#FBBF24']; // Medium - Orange
-    return ['#FBBF24', '#FDE047']; // Bright - Yellow
-  };
-
-  const getCurtainStatusColor = (posisi: string) => {
-    if (posisi === 'Terbuka') return ['#10B981', '#34D399']; // Open - Green
-    if (posisi === 'Tertutup') return ['#EF4444', '#F87171']; // Closed - Red
-    return ['#6366F1', '#818CF8']; // Half - Indigo
+  const getGreeting = () => {
+    const hour = new Date().getHours();
+    if (hour < 12) return 'Good Morning';
+    if (hour < 18) return 'Good Afternoon';
+    return 'Good Evening';
   };
 
   return (
-    <View style={styles.container}>
-      <LinearGradient
-        colors={['#6366F1', '#8B5CF6', '#A855F7']}
-        style={styles.headerGradient}
-      >
-        <View style={styles.header}>
+    <ScrollView 
+      style={styles.container}
+      contentContainerStyle={{ paddingTop: insets.top + 20 }}
+      refreshControl={
+        <RefreshControl 
+          refreshing={loading} 
+          onRefresh={refreshData}
+          tintColor="#667eea"
+          colors={['#667eea']}
+        />
+      }
+      showsVerticalScrollIndicator={false}
+    >
+      {/* Hero Section */}
+      <View style={styles.heroSection}>
+        <LinearGradient
+          colors={['#667eea', '#764ba2']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.heroGradient}
+        >
+          <Text style={styles.heroGreeting}>{getGreeting()}</Text>
+          <Text style={styles.heroTitle}>Smart Home Control</Text>
+          <Text style={styles.heroSubtitle}>Everything at your fingertips</Text>
+        </LinearGradient>
+      </View>
+
+      {/* Main Status Card */}
+      <View style={styles.mainStatusCard}>
+        <View style={styles.mainStatusHeader}>
           <View>
-            <Text style={styles.greeting}>Selamat Datang</Text>
-            <Text style={styles.title}>CurtainCall Dashboard</Text>
+            <Text style={styles.mainStatusLabel}>Curtain Status</Text>
+            <Text style={styles.mainStatusValue}>
+              {sensorData?.posisi || 'Loading...'}
+            </Text>
           </View>
-          <TouchableOpacity style={styles.notificationButton}>
-            <Ionicons name="notifications" size={24} color="#FFF" />
-            {sensorData && sensorData.suhu > 35 && (
-              <View style={styles.notificationBadge} />
-            )}
+          <View style={styles.statusBadge}>
+            <View style={[
+              styles.statusDot,
+              { backgroundColor: sensorData?.posisi === 'Terbuka' ? '#4CAF50' : '#FF9800' }
+            ]} />
+            <Text style={styles.statusBadgeText}>
+              {sensorData?.status_tirai || 'Unknown'}
+            </Text>
+          </View>
+        </View>
+
+        <View style={styles.progressContainer}>
+          <View style={styles.progressBar}>
+            <LinearGradient
+              colors={['#667eea', '#764ba2']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={[
+                styles.progressFill,
+                { width: sensorData?.posisi === 'Terbuka' ? '100%' : '0%' }
+              ]}
+            />
+          </View>
+          <Text style={styles.progressText}>
+            {sensorData?.posisi === 'Terbuka' ? '100% Open' : '0% Open'}
+          </Text>
+        </View>
+
+        <View style={styles.quickActions}>
+          {sensorData?.posisi === 'Terbuka' ? (
+            <TouchableOpacity 
+              style={[styles.quickActionButton, quickCloseLoading && styles.quickActionButtonDisabled]}
+              onPress={handleQuickClose}
+              disabled={quickCloseLoading}
+              activeOpacity={0.8}
+            >
+              {quickCloseLoading ? (
+                <>
+                  <Ionicons name="hourglass" size={18} color="#FFFFFF" />
+                  <Text style={styles.quickActionText}>Closing...</Text>
+                </>
+              ) : (
+                <>
+                  <Ionicons name="flash" size={18} color="#FFFFFF" />
+                  <Text style={styles.quickActionText}>Quick Close</Text>
+                </>
+              )}
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity 
+              style={[styles.quickActionButton, styles.quickActionButtonOpen, quickOpenLoading && styles.quickActionButtonDisabled]}
+              onPress={handleQuickOpen}
+              disabled={quickOpenLoading}
+              activeOpacity={0.8}
+            >
+              {quickOpenLoading ? (
+                <>
+                  <Ionicons name="hourglass" size={18} color="#FFFFFF" />
+                  <Text style={styles.quickActionText}>Opening...</Text>
+                </>
+              ) : (
+                <>
+                  <Ionicons name="flash" size={18} color="#FFFFFF" />
+                  <Text style={styles.quickActionText}>Quick Open</Text>
+                </>
+              )}
+            </TouchableOpacity>
+          )}
+          <TouchableOpacity 
+            style={styles.quickActionButtonSecondary}
+            onPress={handleSettings}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="construct" size={18} color="#667eea" />
+            <Text style={styles.quickActionTextSecondary}>Settings</Text>
           </TouchableOpacity>
         </View>
-      </LinearGradient>
+      </View>
 
-      <ScrollView
-        style={styles.content}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-        }
-        showsVerticalScrollIndicator={false}
-      >
-        {/* Status Card */}
-        <Animated.View style={[styles.statusCard, { opacity: fadeAnim }]}>
-          <LinearGradient
-            colors={['#FFFFFF', '#F8FAFC']}
-            style={styles.statusGradient}
-          >
-            <View style={styles.statusHeader}>
-              <View style={styles.statusBadge}>
-                <View style={[styles.statusDot, { backgroundColor: '#10B981' }]} />
-                <Text style={styles.statusText}>Sistem Aktif</Text>
-              </View>
-              <Text style={styles.updateTime}>
-                <Ionicons name="time-outline" size={14} color="#64748B" />
-                {' '}{lastUpdate || 'Memuat...'}
-              </Text>
-            </View>
-            
-            <View style={styles.modeContainer}>
-              <Ionicons 
-                name={sensorData?.status_tirai === 'Auto' ? "flash" : "hand-left"}
-                size={20} 
-                color="#6366F1" 
-              />
-              <Text style={styles.modeText}>
-                Mode: <Text style={styles.modeBold}>{sensorData?.status_tirai || 'Auto'}</Text>
-              </Text>
-            </View>
-          </LinearGradient>
-        </Animated.View>
+      {/* Sensor Grid */}
+      <View style={styles.sensorGrid}>
+        <StatusCard
+          title="Temperature"
+          value={sensorData?.suhu || '--'}
+          unit="°C"
+          icon="🌡️"
+          colors={['#667eea', '#764ba2']}
+          trend={sensorData?.suhu ? '+2°' : null}
+        />
+        <StatusCard
+          title="Humidity"
+          value={sensorData?.kelembapan || '--'}
+          unit="%"
+          icon="💧"
+          colors={['#f093fb', '#f5576c']}
+          trend={sensorData?.kelembapan ? '-3%' : null}
+        />
+        <StatusCard
+          title="Light"
+          value={sensorData?.cahaya || '--'}
+          unit="lux"
+          icon="💡"
+          colors={['#4facfe', '#00f2fe']}
+          trend={sensorData?.cahaya ? '+50' : null}
+        />
+        <StatusCard
+          title="Mode"
+          value={sensorData?.status_tirai || '--'}
+          icon="🎛️"
+          colors={['#43e97b', '#38f9d7']}
+        />
+      </View>
 
-        {/* Sensor Cards Grid */}
-        <View style={styles.gridContainer}>
-          {/* Temperature Card */}
-          <Animated.View style={[styles.card, { opacity: fadeAnim }]}>
-            <LinearGradient
-              colors={getTemperatureColor(sensorData?.suhu || 25)}
-              style={styles.cardGradient}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-            >
-              <View style={styles.cardContent}>
-                <View style={styles.iconContainer}>
-                  <Ionicons name="thermometer" size={32} color="#FFF" />
-                </View>
-                <View style={styles.cardData}>
-                  <Text style={styles.cardLabel}>Suhu</Text>
-                  <Text style={styles.cardValue}>
-                    {sensorData?.suhu?.toFixed(1) || '--'}°
-                  </Text>
-                  <Text style={styles.cardUnit}>Celsius</Text>
-                </View>
-              </View>
-            </LinearGradient>
-          </Animated.View>
-
-          {/* Humidity Card */}
-          <Animated.View style={[styles.card, { opacity: fadeAnim }]}>
-            <LinearGradient
-              colors={getHumidityColor(sensorData?.kelembapan || 60)}
-              style={styles.cardGradient}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-            >
-              <View style={styles.cardContent}>
-                <View style={styles.iconContainer}>
-                  <Ionicons name="water" size={32} color="#FFF" />
-                </View>
-                <View style={styles.cardData}>
-                  <Text style={styles.cardLabel}>Kelembapan</Text>
-                  <Text style={styles.cardValue}>
-                    {sensorData?.kelembapan?.toFixed(0) || '--'}%
-                  </Text>
-                  <Text style={styles.cardUnit}>Humidity</Text>
-                </View>
-              </View>
-            </LinearGradient>
-          </Animated.View>
-
-          {/* Light Card */}
-          <Animated.View style={[styles.card, { opacity: fadeAnim }]}>
-            <LinearGradient
-              colors={getLightColor(sensorData?.cahaya || 300)}
-              style={styles.cardGradient}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-            >
-              <View style={styles.cardContent}>
-                <View style={styles.iconContainer}>
-                  <Ionicons name="sunny" size={32} color="#FFF" />
-                </View>
-                <View style={styles.cardData}>
-                  <Text style={styles.cardLabel}>Cahaya</Text>
-                  <Text style={styles.cardValue}>
-                    {sensorData?.cahaya || '--'}
-                  </Text>
-                  <Text style={styles.cardUnit}>Lux</Text>
-                </View>
-              </View>
-            </LinearGradient>
-          </Animated.View>
-
-          {/* Curtain Status Card */}
-          <Animated.View style={[styles.card, { opacity: fadeAnim }]}>
-            <LinearGradient
-              colors={getCurtainStatusColor(sensorData?.posisi || 'Tertutup')}
-              style={styles.cardGradient}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-            >
-              <View style={styles.cardContent}>
-                <View style={styles.iconContainer}>
-                  <Ionicons 
-                    name={
-                      sensorData?.posisi === 'Terbuka' ? 'arrow-up-circle' :
-                      sensorData?.posisi === 'Tertutup' ? 'arrow-down-circle' :
-                      'remove-circle'
-                    } 
-                    size={32} 
-                    color="#FFF" 
-                  />
-                </View>
-                <View style={styles.cardData}>
-                  <Text style={styles.cardLabel}>Status Tirai</Text>
-                  <Text style={styles.cardValue} numberOfLines={1} adjustsFontSizeToFit>
-                    {sensorData?.posisi || '--'}
-                  </Text>
-                  <Text style={styles.cardUnit}>Position</Text>
-                </View>
-              </View>
-            </LinearGradient>
-          </Animated.View>
+      {/* Recent Activity */}
+      <View style={styles.activitySection}>
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>Recent Activity</Text>
+          <TouchableOpacity onPress={() => router.push('/(tabs)/notifications')} activeOpacity={0.7}>
+            <Text style={styles.sectionLink}>View All</Text>
+          </TouchableOpacity>
         </View>
-
-        {/* Temperature Alert */}
-        {sensorData && sensorData.suhu > 35 && (
-          <Animated.View style={[styles.alertCard, { opacity: fadeAnim }]}>
+        
+        <TouchableOpacity 
+          style={styles.activityItem}
+          onPress={() => router.push('/(tabs)/control')}
+          activeOpacity={0.7}
+        >
+          <View style={styles.activityIcon}>
             <LinearGradient
-              colors={['#FEE2E2', '#FECACA']}
-              style={styles.alertGradient}
+              colors={['#667eea', '#764ba2']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.activityIconGradient}
             >
-              <View style={styles.alertContent}>
-                <View style={styles.alertIcon}>
-                  <Ionicons name="warning" size={24} color="#DC2626" />
-                </View>
-                <View style={styles.alertTextContainer}>
-                  <Text style={styles.alertTitle}>⚠️ Peringatan Suhu Tinggi!</Text>
-                  <Text style={styles.alertDescription}>
-                    Suhu mencapai {sensorData.suhu.toFixed(1)}°C. Buzzer telah diaktifkan.
-                  </Text>
-                </View>
-              </View>
+              <Text style={styles.activityEmoji}>🌅</Text>
             </LinearGradient>
-          </Animated.View>
-        )}
+          </View>
+          <View style={styles.activityContent}>
+            <Text style={styles.activityTitle}>
+              {sensorData?.status_tirai === 'Auto' ? 'Auto mode active' : 'Manual mode active'}
+            </Text>
+            <Text style={styles.activityTime}>
+              {sensorData?.timestamp ? new Date(sensorData.timestamp).toLocaleString() : 'Just now'}
+            </Text>
+          </View>
+          <Ionicons name="chevron-forward" size={20} color="#B0B8C5" />
+        </TouchableOpacity>
 
-        {/* Info Card */}
-        <View style={styles.infoCard}>
-          <View style={styles.infoHeader}>
-            <Ionicons name="information-circle" size={20} color="#6366F1" />
-            <Text style={styles.infoTitle}>Informasi Sistem</Text>
+        <TouchableOpacity 
+          style={styles.activityItem}
+          onPress={() => router.push('/(tabs)/control')}
+          activeOpacity={0.7}
+        >
+          <View style={styles.activityIcon}>
+            <LinearGradient
+              colors={['#4facfe', '#00f2fe']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.activityIconGradient}
+            >
+              <Text style={styles.activityEmoji}>📱</Text>
+            </LinearGradient>
           </View>
-          <View style={styles.infoItem}>
-            <Text style={styles.infoLabel}>Auto Refresh</Text>
-            <Text style={styles.infoValue}>Setiap 5 detik</Text>
+          <View style={styles.activityContent}>
+            <Text style={styles.activityTitle}>
+              Curtain {sensorData?.posisi?.toLowerCase() || 'status updated'}
+            </Text>
+            <Text style={styles.activityTime}>
+              {sensorData?.timestamp ? new Date(sensorData.timestamp).toLocaleString() : 'Recently'}
+            </Text>
           </View>
-          <View style={styles.infoItem}>
-            <Text style={styles.infoLabel}>Data Source</Text>
-            <Text style={styles.infoValue}>ESP32 Sensor</Text>
-          </View>
-          <View style={styles.infoItem}>
-            <Text style={styles.infoLabel}>Koneksi</Text>
-            <View style={styles.connectionStatus}>
-              <View style={styles.connectionDot} />
-              <Text style={styles.infoValue}>Terhubung</Text>
-            </View>
-          </View>
-        </View>
+          <Ionicons name="chevron-forward" size={20} color="#B0B8C5" />
+        </TouchableOpacity>
+      </View>
 
-        {/* Bottom Spacing */}
-        <View style={{ height: 32 }} />
-      </ScrollView>
-    </View>
+      {/* Last Update */}
+      <View style={styles.lastUpdateContainer}>
+        <View style={styles.updateDot} />
+        <Text style={styles.lastUpdateText}>
+          Last synced: {sensorData?.timestamp ? new Date(sensorData.timestamp).toLocaleTimeString() : 'Just now'}
+        </Text>
+      </View>
+
+      <View style={{ height: 100 }} />
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8FAFC',
+    backgroundColor: '#F8F9FA',
   },
-  headerGradient: {
-    paddingTop: 0,
+  heroSection: {
+    marginHorizontal: 20,
+    marginBottom: 24,
+    borderRadius: 24,
+    overflow: 'hidden',
+    shadowColor: '#667eea',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.3,
+    shadowRadius: 20,
+    elevation: 10,
   },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 24,
+  heroGradient: {
+    padding: 32,
+    paddingVertical: 36,
   },
-  greeting: {
+  heroGreeting: {
     fontSize: 14,
-    color: '#E0E7FF',
+    color: 'rgba(255, 255, 255, 0.9)',
+    fontWeight: '600',
+    marginBottom: 4,
+    letterSpacing: 0.5,
+  },
+  heroTitle: {
+    fontSize: 32,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    marginBottom: 8,
+    letterSpacing: -1,
+  },
+  heroSubtitle: {
+    fontSize: 16,
+    color: 'rgba(255, 255, 255, 0.85)',
     fontWeight: '500',
   },
-  title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#FFF',
-    marginTop: 4,
-  },
-  notificationButton: {
-    width: 48,
-    height: 48,
+  mainStatusCard: {
+    backgroundColor: '#FFFFFF',
+    marginHorizontal: 20,
     borderRadius: 24,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    justifyContent: 'center',
-    alignItems: 'center',
+    padding: 24,
+    marginBottom: 24,
+    shadowColor: '#667eea',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.15,
+    shadowRadius: 24,
+    elevation: 8,
   },
-  notificationBadge: {
-    position: 'absolute',
-    top: 8,
-    right: 8,
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: '#EF4444',
-    borderWidth: 2,
-    borderColor: '#FFF',
-  },
-  content: {
-    flex: 1,
-    marginTop: -16,
-  },
-  statusCard: {
-    marginHorizontal: 16,
-    marginBottom: 20,
-    borderRadius: 20,
-    overflow: 'hidden',
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 8,
-      },
-      android: {
-        elevation: 4,
-      },
-      web: {
-        boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)',
-      },
-    }),
-  },
-  statusGradient: {
-    padding: 20,
-  },
-  statusHeader: {
+  mainStatusHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 16,
+    alignItems: 'flex-start',
+    marginBottom: 20,
+  },
+  mainStatusLabel: {
+    fontSize: 14,
+    color: '#8F9BB3',
+    fontWeight: '600',
+    marginBottom: 6,
+    letterSpacing: 0.3,
+  },
+  mainStatusValue: {
+    fontSize: 24,
+    fontWeight: '800',
+    color: '#2E3A59',
+    letterSpacing: -0.5,
   },
   statusBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#ECFDF5',
+    backgroundColor: '#E8F5E9',
     paddingHorizontal: 12,
     paddingVertical: 6,
-    borderRadius: 12,
+    borderRadius: 20,
   },
   statusDot: {
     width: 8,
@@ -388,187 +434,230 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     marginRight: 6,
   },
-  statusText: {
+  statusBadgeText: {
     fontSize: 12,
+    fontWeight: '700',
+    color: '#4CAF50',
+  },
+  progressContainer: {
+    marginBottom: 20,
+  },
+  progressBar: {
+    height: 8,
+    backgroundColor: '#F1F3F5',
+    borderRadius: 4,
+    overflow: 'hidden',
+    marginBottom: 8,
+  },
+  progressFill: {
+    height: '100%',
+    borderRadius: 4,
+  },
+  progressText: {
+    fontSize: 12,
+    color: '#8F9BB3',
     fontWeight: '600',
-    color: '#059669',
   },
-  updateTime: {
-    fontSize: 12,
-    color: '#64748B',
+  quickActions: {
+    flexDirection: 'row',
+    gap: 12,
   },
-  modeContainer: {
+  quickActionButton: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#EEF2FF',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 12,
+    justifyContent: 'center',
+    backgroundColor: '#667eea',
+    padding: 14,
+    borderRadius: 16,
+    gap: 8,
+    shadowColor: '#667eea',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
   },
-  modeText: {
+  quickActionButtonOpen: {
+    backgroundColor: '#43e97b',
+    shadowColor: '#43e97b',
+  },
+  quickActionButtonDisabled: {
+    opacity: 0.6,
+  },
+  quickActionButtonSecondary: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F1F3F5',
+    padding: 14,
+    borderRadius: 16,
+    gap: 8,
+  },
+  quickActionText: {
     fontSize: 14,
-    color: '#64748B',
-    marginLeft: 8,
-  },
-  modeBold: {
     fontWeight: '700',
-    color: '#6366F1',
+    color: '#FFFFFF',
   },
-  gridContainer: {
+  quickActionTextSecondary: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#667eea',
+  },
+  sensorGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    paddingHorizontal: 8,
+    paddingHorizontal: 14,
+    marginBottom: 24,
   },
   card: {
-    width: CARD_WIDTH,
-    margin: 8,
+    width: '47%',
+    marginHorizontal: '1.5%',
+    marginBottom: 16,
     borderRadius: 20,
     overflow: 'hidden',
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.15,
-        shadowRadius: 12,
-      },
-      android: {
-        elevation: 5,
-      },
-      web: {
-        boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
-      },
-    }),
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.15,
+    shadowRadius: 16,
+    elevation: 6,
   },
   cardGradient: {
     padding: 20,
-    minHeight: 160,
-  },
-  cardContent: {
-    flex: 1,
+    minHeight: 140,
     justifyContent: 'space-between',
   },
-  iconContainer: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: 'rgba(255, 255, 255, 0.25)',
-    justifyContent: 'center',
+  cardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 12,
   },
-  cardData: {
-    marginTop: 8,
-  },
-  cardLabel: {
-    fontSize: 12,
+  cardTitle: {
+    fontSize: 13,
     color: 'rgba(255, 255, 255, 0.9)',
-    fontWeight: '500',
-    marginBottom: 4,
+    fontWeight: '700',
+    letterSpacing: 0.3,
+  },
+  trendBadge: {
+    backgroundColor: 'rgba(255, 255, 255, 0.25)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  trendText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  cardValueContainer: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
   },
   cardValue: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    color: '#FFF',
-    marginBottom: 2,
+    fontSize: 28,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    letterSpacing: -1,
   },
   cardUnit: {
-    fontSize: 11,
-    color: 'rgba(255, 255, 255, 0.8)',
-    fontWeight: '500',
-  },
-  alertCard: {
-    marginHorizontal: 16,
-    marginBottom: 16,
-    borderRadius: 16,
-    overflow: 'hidden',
-  },
-  alertGradient: {
-    padding: 16,
-  },
-  alertContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  alertIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: '#FEE2E2',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-  },
-  alertTextContainer: {
-    flex: 1,
-  },
-  alertTitle: {
     fontSize: 14,
-    fontWeight: '700',
-    color: '#991B1B',
-    marginBottom: 4,
+    color: 'rgba(255, 255, 255, 0.85)',
+    fontWeight: '600',
+    marginLeft: 4,
   },
-  alertDescription: {
-    fontSize: 12,
-    color: '#DC2626',
-    lineHeight: 18,
+  cardIcon: {
+    position: 'absolute',
+    right: 16,
+    top: 16,
+    opacity: 0.3,
   },
-  infoCard: {
-    marginHorizontal: 16,
-    backgroundColor: '#FFF',
-    borderRadius: 16,
+  iconText: {
+    fontSize: 40,
+  },
+  activitySection: {
+    backgroundColor: '#FFFFFF',
+    marginHorizontal: 20,
+    borderRadius: 20,
     padding: 20,
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.05,
-        shadowRadius: 8,
-      },
-      android: {
-        elevation: 2,
-      },
-      web: {
-        boxShadow: '0 2px 8px rgba(0, 0, 0, 0.05)',
-      },
-    }),
+    marginBottom: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 16,
+    elevation: 4,
   },
-  infoHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  infoTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#1E293B',
-    marginLeft: 8,
-  },
-  infoItem: {
+  sectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F1F5F9',
+    marginBottom: 16,
   },
-  infoLabel: {
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#2E3A59',
+    letterSpacing: -0.3,
+  },
+  sectionLink: {
     fontSize: 14,
-    color: '#64748B',
+    fontWeight: '700',
+    color: '#667eea',
   },
-  infoValue: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#1E293B',
-  },
-  connectionStatus: {
+  activityItem: {
     flexDirection: 'row',
     alignItems: 'center',
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F3F5',
   },
-  connectionDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: '#10B981',
-    marginRight: 6,
+  activityIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    marginRight: 14,
+    overflow: 'hidden',
+  },
+  activityIconGradient: {
+    width: '100%',
+    height: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  activityEmoji: {
+    fontSize: 22,
+  },
+  activityContent: {
+    flex: 1,
+  },
+  activityTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#2E3A59',
+    marginBottom: 3,
+  },
+  activityTime: {
+    fontSize: 12,
+    color: '#8F9BB3',
+    fontWeight: '500',
+  },
+  lastUpdateContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 20,
+    marginHorizontal: 20,
+  },
+  updateDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#4CAF50',
+    marginRight: 8,
+  },
+  lastUpdateText: {
+    fontSize: 13,
+    color: '#8F9BB3',
+    fontWeight: '600',
   },
 });
