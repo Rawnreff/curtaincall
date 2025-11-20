@@ -1,5 +1,6 @@
 import { Tabs } from 'expo-router';
 import { View, StyleSheet, Platform, Dimensions } from 'react-native';
+import VoiceButton from '../../components/ui/voice-button';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
@@ -41,7 +42,8 @@ export default function TabLayout() {
   };
   
   return (
-    <Tabs
+    <View style={{ flex: 1 }}>
+      <Tabs
       screenOptions={{
         tabBarStyle: [
           styles.tabBar,
@@ -181,6 +183,20 @@ export default function TabLayout() {
         }}
       />
     </Tabs>
+      {/* Voice command button overlay (right-bottom, above tab bar) */}
+      <VoiceButton
+        onPress={() => {
+          // Default action: navigate to a voice command modal or start recording
+          console.log('Voice command pressed');
+        }}
+        // Position the button to the right-bottom slightly higher above the tab bar
+        style={{
+          right: horizontalPadding - 8,
+          bottom: bottomInset + (isSmallScreen ? 82 : 88),
+          position: 'absolute',
+        }}
+      />
+    </View>
   );
 }
 
