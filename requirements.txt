@@ -2,3 +2,7 @@ Flask==2.3.0
 flask-cors==4.0.0
 python-dotenv==1.0.0
 google-generativeai==0.3.0
+Flask-PyMongo==2.3.0
+paho-mqtt==1.6.1
+scikit-learn>=1.5.0
+numpy>=1.26.0
