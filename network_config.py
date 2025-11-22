@@ -12,7 +12,7 @@ class NetworkConfig:
     """Konfigurasi network untuk backend"""
     
     # MQTT Broker Configuration
-    MQTT_BROKER_IP = os.getenv('MQTT_BROKER_IP', '192.168.137.1')
+    MQTT_BROKER_IP = os.getenv('MQTT_BROKER_IP', '127.0.0.1')
     MQTT_BROKER_PORT = int(os.getenv('MQTT_BROKER_PORT', 1883))
     MQTT_KEEPALIVE = int(os.getenv('MQTT_KEEPALIVE', 60))
     MQTT_TLS_ENABLED = os.getenv('MQTT_TLS_ENABLED', 'False').lower() == 'true'
