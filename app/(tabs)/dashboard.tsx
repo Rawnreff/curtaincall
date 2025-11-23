@@ -176,24 +176,28 @@ export default function DashboardScreen() {
         <View style={styles.progressContainer}>
           <View style={styles.progressBar}>
             <LinearGradient
-              colors={['#667eea', '#764ba2']}
+              colors={
+                sensorData?.posisi === 'Terbuka' 
+                  ? ['#10b981', '#059669']  // Green when open
+                  : ['#f5576c', '#f093fb']  // Red when closed
+              }
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 0 }}
               style={[
                 styles.progressFill,
-                { width: sensorData?.posisi === 'Terbuka' ? '100%' : '0%' }
+                { width: sensorData?.posisi === 'Terbuka' ? '100%' : '10%' }  // 10% when closed
               ]}
             />
           </View>
           <Text style={styles.progressText}>
-            {sensorData?.posisi === 'Terbuka' ? '100% Open' : '0% Open'}
+            {sensorData?.posisi === 'Terbuka' ? '100% Open' : 'Closed'}
           </Text>
         </View>
 
         <View style={styles.quickActions}>
           {sensorData?.posisi === 'Terbuka' ? (
             <TouchableOpacity 
-              style={[styles.quickActionButton, quickCloseLoading && styles.quickActionButtonDisabled]}
+              style={[styles.quickActionButtonClose, quickCloseLoading && styles.quickActionButtonDisabled]}
               onPress={handleQuickClose}
               disabled={quickCloseLoading}
               activeOpacity={0.8}
@@ -205,14 +209,14 @@ export default function DashboardScreen() {
                 </>
               ) : (
                 <>
-                  <Ionicons name="flash" size={18} color="#FFFFFF" />
+                  <Ionicons name="close-circle" size={18} color="#FFFFFF" />
                   <Text style={styles.quickActionText}>Quick Close</Text>
                 </>
               )}
             </TouchableOpacity>
           ) : (
             <TouchableOpacity 
-              style={[styles.quickActionButton, styles.quickActionButtonOpen, quickOpenLoading && styles.quickActionButtonDisabled]}
+              style={[styles.quickActionButtonOpen, quickOpenLoading && styles.quickActionButtonDisabled]}
               onPress={handleQuickOpen}
               disabled={quickOpenLoading}
               activeOpacity={0.8}
@@ -224,7 +228,7 @@ export default function DashboardScreen() {
                 </>
               ) : (
                 <>
-                  <Ionicons name="flash" size={18} color="#FFFFFF" />
+                  <Ionicons name="arrow-up-circle" size={18} color="#FFFFFF" />
                   <Text style={styles.quickActionText}>Quick Open</Text>
                 </>
               )}
@@ -271,7 +275,7 @@ export default function DashboardScreen() {
           title="Mode"
           value={sensorData?.status_tirai || '--'}
           icon="🎛️"
-          colors={['#43e97b', '#38f9d7']}
+          colors={['#10b981', '#059669']}
         />
       </View>
 
@@ -462,24 +466,35 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 12,
   },
-  quickActionButton: {
+  quickActionButtonClose: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#667eea',
+    backgroundColor: '#FF9800',
     padding: 14,
     borderRadius: 16,
     gap: 8,
-    shadowColor: '#667eea',
+    shadowColor: '#FF9800',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
     elevation: 4,
   },
   quickActionButtonOpen: {
-    backgroundColor: '#43e97b',
-    shadowColor: '#43e97b',
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#10b981',
+    padding: 14,
+    borderRadius: 16,
+    gap: 8,
+    shadowColor: '#10b981',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
   },
   quickActionButtonDisabled: {
     opacity: 0.6,

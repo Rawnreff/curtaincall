@@ -189,7 +189,7 @@ export default function ProfileScreen() {
             subtitle="Enable automatic curtain control"
             value={autoMode}
             onValueChange={setAutoMode}
-            gradient={['#43e97b', '#38f9d7']}
+            gradient={['#10b981', '#059669']}
           />
           <SettingsButton
             icon="time"
@@ -232,7 +232,7 @@ export default function ProfileScreen() {
             icon="text"
             title="Text Size"
             subtitle="Adjust font size"
-            gradient={['#43e97b', '#38f9d7']}
+            gradient={['#10b981', '#059669']}
             onPress={() => Alert.alert('Coming Soon', 'Text size settings will be available soon')}
           />
         </View>
@@ -254,7 +254,7 @@ export default function ProfileScreen() {
             icon="shield-checkmark"
             title="Privacy Policy"
             subtitle="View our privacy policy"
-            gradient={['#43e97b', '#38f9d7']}
+            gradient={['#10b981', '#059669']}
             onPress={() => Alert.alert('Privacy Policy', 'Our privacy policy protects your data')}
           />
           <SettingsButton
@@ -294,7 +294,7 @@ export default function ProfileScreen() {
             icon="download"
             title="Export Data"
             subtitle="Download your data"
-            gradient={['#43e97b', '#38f9d7']}
+            gradient={['#10b981', '#059669']}
             onPress={() => Alert.alert('Coming Soon', 'Data export will be available soon')}
           />
         </View>

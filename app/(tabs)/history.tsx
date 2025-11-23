@@ -161,7 +161,7 @@ export default function HistoryScreen() {
                 end={{ x: 1, y: 1 }}
                 style={styles.statCardGradient}
               >
-                <Ionicons name="thermometer" size={28} color="#FFFFFF" />
+                <Ionicons name="thermometer-outline" size={28} color="#FFFFFF" />
                 <Text style={styles.statValue}>{stats.maxTemp.toFixed(1)}°C</Text>
                 <Text style={styles.statLabel}>Max Temperature</Text>
               </LinearGradient>
@@ -174,7 +174,7 @@ export default function HistoryScreen() {
                 end={{ x: 1, y: 1 }}
                 style={styles.statCardGradient}
               >
-                <Ionicons name="thermometer-outline" size={28} color="#FFFFFF" />
+                <Ionicons name="thermometer" size={28} color="#FFFFFF" />
                 <Text style={styles.statValue}>{stats.minTemp.toFixed(1)}°C</Text>
                 <Text style={styles.statLabel}>Min Temperature</Text>
               </LinearGradient>
@@ -195,7 +195,7 @@ export default function HistoryScreen() {
 
             <View style={styles.statCard}>
               <LinearGradient
-                colors={['#43e97b', '#38f9d7']}
+                colors={['#10b981', '#059669']}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
                 style={styles.statCardGradient}

@@ -29,8 +29,10 @@ export const setToken = (token: string | null) => {
   authToken = token;
   if (token) {
     api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+    console.log('✅ Token set in API service:', token.substring(0, 20) + '...');
   } else {
     delete api.defaults.headers.common['Authorization'];
+    console.log('🔓 Token cleared from API service');
   }
 };
 
@@ -48,6 +50,9 @@ api.interceptors.request.use(
   (config) => {
     if (authToken) {
       config.headers.Authorization = `Bearer ${authToken}`;
+      console.log('🔑 Token attached to request:', config.url);
+    } else {
+      console.log('⚠️ No token available for request:', config.url);
     }
     return config;
   },

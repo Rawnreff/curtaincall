@@ -49,6 +49,7 @@ type Props = {
 
 export default function VoiceButton({ onPress, accessibilityLabel = 'Voice Command', style }: Props) {
   const wave1 = useRef(new Animated.Value(0)).current;
+  const pulseAnim = useRef(new Animated.Value(1)).current;
   const [showModal, setShowModal] = useState(false);
   const [inputText, setInputText] = useState('');
   const [loading, setLoading] = useState(false);
@@ -95,6 +96,30 @@ export default function VoiceButton({ onPress, accessibilityLabel = 'Voice Comma
       mounted = false;
     };
   }, [wave1]);
+
+  // Pulse animation for recording state
+  useEffect(() => {
+    if (isRecording) {
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(pulseAnim, {
+            toValue: 1.1,
+            duration: 800,
+            easing: Easing.inOut(Easing.ease),
+            useNativeDriver: true,
+          }),
+          Animated.timing(pulseAnim, {
+            toValue: 1,
+            duration: 800,
+            easing: Easing.inOut(Easing.ease),
+            useNativeDriver: true,
+          }),
+        ])
+      ).start();
+    } else {
+      pulseAnim.setValue(1);
+    }
+  }, [isRecording, pulseAnim]);
 
   // Speech-to-text handlers using react-native-voice (only if available)
   useEffect(() => {
@@ -466,22 +491,47 @@ export default function VoiceButton({ onPress, accessibilityLabel = 'Voice Comma
         <View style={styles.modalOverlay}>
           <View style={styles.modalCard}>
             {/* Large mic button in center */}
-            <TouchableOpacity
-              style={[styles.largeMicButton, isRecording && styles.largeMicButtonActive]}
-              onPress={handleMicPress}
-              disabled={loading && !isRecording}
-              activeOpacity={0.8}
-            >
-              {loading && !isRecording ? (
-                <ActivityIndicator size="large" color="#667eea" />
-              ) : (
-                <Ionicons 
-                  name={isRecording ? 'mic' : 'mic-outline'} 
-                  size={48} 
-                  color={isRecording ? '#fff' : '#667eea'} 
-                />
-              )}
-            </TouchableOpacity>
+            <Animated.View style={[styles.micButtonContainer, isRecording && { transform: [{ scale: pulseAnim }] }]}>
+              <TouchableOpacity
+                onPress={handleMicPress}
+                disabled={loading && !isRecording}
+                activeOpacity={0.8}
+              >
+                {isRecording ? (
+                  // Recording state - filled gradient with glow
+                  <View style={styles.recordingContainer}>
+                    <View style={styles.recordingGlow} />
+                    <LinearGradient
+                      colors={['#667eea', '#764ba2']}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 1 }}
+                      style={styles.largeMicButtonActive}
+                    >
+                      <View style={styles.micButtonInner}>
+                        <Ionicons name="mic" size={48} color="#fff" />
+                      </View>
+                    </LinearGradient>
+                  </View>
+                ) : loading ? (
+                  // Loading state
+                  <View style={styles.largeMicButton}>
+                    <ActivityIndicator size="large" color="#667eea" />
+                  </View>
+                ) : (
+                  // Idle state - soft gradient background with border
+                  <View style={styles.largeMicButton}>
+                    <LinearGradient
+                      colors={['rgba(102,126,234,0.05)', 'rgba(118,75,162,0.05)']}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 1 }}
+                      style={styles.micButtonGradient}
+                    />
+                    <View style={styles.micButtonBorder} />
+                    <Ionicons name="mic-outline" size={48} color="#667eea" />
+                  </View>
+                )}
+              </TouchableOpacity>
+            </Animated.View>
 
             {/* Status text */}
             <Text style={styles.statusText}>{statusText}</Text>
@@ -599,29 +649,67 @@ const styles = StyleSheet.create({
     elevation: 16,
     position: 'relative',
   },
+  micButtonContainer: {
+    marginBottom: 24,
+  },
   largeMicButton: {
     width: 120,
     height: 120,
     borderRadius: 60,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(102,126,234,0.08)',
-    borderWidth: 3,
-    borderColor: '#667eea',
-    marginBottom: 24,
+    backgroundColor: '#fff',
+    overflow: 'hidden',
     shadowColor: '#667eea',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
+    shadowOpacity: 0.15,
     shadowRadius: 12,
-    elevation: 8,
+    elevation: 6,
+  },
+  micButtonGradient: {
+    position: 'absolute',
+    width: '100%',
+    height: '100%',
+    borderRadius: 60,
+  },
+  micButtonBorder: {
+    position: 'absolute',
+    width: 116,
+    height: 116,
+    borderRadius: 58,
+    borderWidth: 2,
+    borderColor: 'rgba(102,126,234,0.2)',
+  },
+  micButtonInner: {
+    width: '100%',
+    height: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  recordingContainer: {
+    position: 'relative',
+    width: 120,
+    height: 120,
+  },
+  recordingGlow: {
+    position: 'absolute',
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: '#667eea',
+    opacity: 0.3,
+    transform: [{ scale: 1.2 }],
   },
   largeMicButtonActive: {
-    backgroundColor: '#667eea',
-    borderColor: '#667eea',
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    alignItems: 'center',
+    justifyContent: 'center',
     shadowColor: '#667eea',
     shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.4,
-    shadowRadius: 16,
+    shadowOpacity: 0.5,
+    shadowRadius: 24,
     elevation: 12,
   },
   statusText: {

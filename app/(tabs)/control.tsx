@@ -23,6 +23,13 @@ export default function ControlScreen() {
   const [rulesLoading, setRulesLoading] = useState(false);
   const scaleAnim = new Animated.Value(1);
 
+  // Helper function to safely determine if auto mode is active
+  const isAutoMode = () => {
+    // Handle edge cases: undefined, null, or unexpected values
+    if (!sensorData?.status_tirai) return false;
+    return sensorData.status_tirai === 'Auto';
+  };
+
   useEffect(() => {
     loadRules();
   }, []);
@@ -169,7 +176,7 @@ export default function ControlScreen() {
   };
 
   const getModeColor = (): [string, string] => {
-    if (sensorData?.status_tirai === 'Auto') return ['#43e97b', '#38f9d7'];
+    if (sensorData?.status_tirai === 'Auto') return ['#10b981', '#059669']; // Darker green for better readability
     return ['#667eea', '#764ba2'];
   };
 
@@ -215,19 +222,26 @@ export default function ControlScreen() {
         <View style={styles.positionDisplay}>
           <View style={styles.curtainVisual}>
             <LinearGradient
-              colors={['#667eea', '#764ba2']}
+              colors={
+                sensorData?.posisi === 'Terbuka' 
+                  ? ['#10b981', '#059669']  // Green when open
+                  : ['#f5576c', '#f093fb']  // Red when closed
+              }
               start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
+              end={{ x: 0, y: 1 }}
               style={[
                 styles.curtainBar,
-                { height: sensorData?.posisi === 'Terbuka' ? '100%' : '20%' }
+                { height: sensorData?.posisi === 'Terbuka' ? '100%' : '15%' }
               ]}
             />
           </View>
           <View style={styles.positionInfo}>
             <Text style={styles.positionValue}>{sensorData?.posisi || 'Unknown'}</Text>
-            <Text style={styles.positionPercent}>
-              {sensorData?.posisi === 'Terbuka' ? '100%' : '0%'}
+            <Text style={[
+              styles.positionPercent,
+              { color: sensorData?.posisi === 'Terbuka' ? '#10b981' : '#f5576c' }
+            ]}>
+              {sensorData?.posisi === 'Terbuka' ? '100% Open' : 'Closed'}
             </Text>
           </View>
         </View>
@@ -246,7 +260,7 @@ export default function ControlScreen() {
             iconName="arrow-up-circle"
             mode="manual"
             action="open"
-            colors={['#43e97b', '#38f9d7']}
+            colors={['#10b981', '#059669']}
             disabled={sensorData?.posisi === 'Terbuka'}
           />
           <ControlButton
@@ -294,33 +308,53 @@ export default function ControlScreen() {
             </View>
           </View>
 
+          {/* Status Indicator */}
+          <View style={styles.modeStatusIndicatorCard}>
+            <Ionicons 
+              name={isAutoMode() ? 'checkmark-circle' : 'hand-right'} 
+              size={20} 
+              color={isAutoMode() ? '#10b981' : '#667eea'} 
+            />
+            <Text style={[
+              styles.modeStatusIndicatorText,
+              { color: isAutoMode() ? '#10b981' : '#667eea' }
+            ]}>
+              Currently Active: {isAutoMode() ? 'Auto Mode' : 'Manual Mode'}
+            </Text>
+          </View>
+
           <View style={styles.autoModeButtons}>
             <TouchableOpacity
               style={[
                 styles.autoModeButton,
-                sensorData?.status_tirai === 'Auto' && styles.autoModeButtonActive
+                isAutoMode() && styles.autoModeButtonActive
               ]}
               onPress={() => handleCommand('auto', 'enable')}
-              disabled={sensorData?.status_tirai === 'Auto' || loading === 'enable'}
+              disabled={isAutoMode() || loading === 'enable'}
             >
               <LinearGradient
                 colors={
-                  sensorData?.status_tirai === 'Auto' 
-                    ? ['#43e97b', '#38f9d7'] 
+                  isAutoMode() 
+                    ? ['#10b981', '#059669'] 
                     : ['#F1F3F5', '#F1F3F5']
                 }
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
                 style={styles.autoModeButtonGradient}
               >
+                {isAutoMode() && (
+                  <View style={styles.activeCheckmark}>
+                    <Ionicons name="checkmark-circle" size={20} color="#FFFFFF" />
+                  </View>
+                )}
                 <Ionicons 
                   name="play-circle" 
                   size={24} 
-                  color={sensorData?.status_tirai === 'Auto' ? '#FFFFFF' : '#667eea'} 
+                  color={isAutoMode() ? '#FFFFFF' : '#8F9BB3'} 
                 />
                 <Text style={[
                   styles.autoModeButtonText,
-                  sensorData?.status_tirai === 'Auto' && styles.autoModeButtonTextActive
+                  isAutoMode() && styles.autoModeButtonTextActive
                 ]}>
                   Enable Auto
                 </Text>
@@ -333,14 +367,14 @@ export default function ControlScreen() {
             <TouchableOpacity
               style={[
                 styles.autoModeButton,
-                sensorData?.status_tirai !== 'Auto' && styles.autoModeButtonActive
+                !isAutoMode() && styles.autoModeButtonActive
               ]}
               onPress={() => handleCommand('auto', 'disable')}
-              disabled={sensorData?.status_tirai !== 'Auto' || loading === 'disable'}
+              disabled={!isAutoMode() || loading === 'disable'}
             >
               <LinearGradient
                 colors={
-                  sensorData?.status_tirai !== 'Auto' 
+                  !isAutoMode() 
                     ? ['#667eea', '#764ba2'] 
                     : ['#F1F3F5', '#F1F3F5']
                 }
@@ -348,14 +382,19 @@ export default function ControlScreen() {
                 end={{ x: 1, y: 1 }}
                 style={styles.autoModeButtonGradient}
               >
+                {!isAutoMode() && (
+                  <View style={styles.activeCheckmark}>
+                    <Ionicons name="checkmark-circle" size={20} color="#FFFFFF" />
+                  </View>
+                )}
                 <Ionicons 
                   name="pause-circle" 
                   size={24} 
-                  color={sensorData?.status_tirai !== 'Auto' ? '#FFFFFF' : '#8F9BB3'} 
+                  color={!isAutoMode() ? '#FFFFFF' : '#8F9BB3'} 
                 />
                 <Text style={[
                   styles.autoModeButtonText,
-                  sensorData?.status_tirai !== 'Auto' && styles.autoModeButtonTextActive
+                  !isAutoMode() && styles.autoModeButtonTextActive
                 ]}>
                   Disable Auto
                 </Text>
@@ -690,10 +729,12 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     overflow: 'hidden',
     justifyContent: 'flex-end',
+    borderWidth: 2,
+    borderColor: '#E4E9F2',
   },
   curtainBar: {
     width: '100%',
-    borderRadius: 12,
+    borderRadius: 10,
   },
   positionInfo: {
     flex: 1,
@@ -839,6 +880,21 @@ const styles = StyleSheet.create({
     color: '#8F9BB3',
     fontWeight: '500',
   },
+  modeStatusIndicatorCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F8F9FA',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 12,
+    marginBottom: 16,
+    gap: 10,
+  },
+  modeStatusIndicatorText: {
+    fontSize: 14,
+    fontWeight: '700',
+    letterSpacing: 0.2,
+  },
   autoModeButtons: {
     gap: 12,
   },
@@ -847,11 +903,12 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   autoModeButtonActive: {
-    shadowColor: '#667eea',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 12,
-    elevation: 6,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.25,
+    shadowRadius: 16,
+    elevation: 8,
+    transform: [{ scale: 1.02 }],
   },
   autoModeButtonGradient: {
     flexDirection: 'row',
@@ -863,10 +920,15 @@ const styles = StyleSheet.create({
   autoModeButtonText: {
     fontSize: 16,
     fontWeight: '800',
-    color: '#667eea',
+    color: '#8F9BB3',
   },
   autoModeButtonTextActive: {
     color: '#FFFFFF',
+  },
+  activeCheckmark: {
+    position: 'absolute',
+    top: 12,
+    right: 12,
   },
   autoModeButtonLoading: {
     fontSize: 16,

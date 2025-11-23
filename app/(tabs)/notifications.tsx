@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl, Modal } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { notificationService } from '../services/notificationService';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -10,6 +10,8 @@ export default function NotificationsScreen() {
   const [notifications, setNotifications] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [selectedNotification, setSelectedNotification] = useState<any>(null);
+  const [showDetailModal, setShowDetailModal] = useState(false);
 
   useEffect(() => {
     loadNotifications();
@@ -43,28 +45,34 @@ export default function NotificationsScreen() {
   };
 
   const handleNotificationPress = async (notification: any) => {
-    const notificationId = notification.id || notification._id;
+    // Show detail modal
+    setSelectedNotification(notification);
+    setShowDetailModal(true);
     
+    // Mark as read if unread
+    const notificationId = notification.id || notification._id;
     if (!notification.read && notificationId) {
       try {
         console.log('📬 Marking notification as read:', notificationId);
         await notificationService.markAsRead(notificationId);
         console.log('✅ Notification marked as read successfully');
-        await loadNotifications();
+        // Update local state
+        setNotifications(prev => 
+          prev.map(n => 
+            (n.id === notificationId || n._id === notificationId) 
+              ? { ...n, read: true } 
+              : n
+          )
+        );
       } catch (error: any) {
         console.error('❌ Failed to mark notification as read:', error);
-        console.error('Error details:', {
-          message: error.message,
-          response: error.response?.data,
-          status: error.response?.status
-        });
       }
-    } else {
-      console.log('ℹ️ Notification already read or missing ID:', {
-        read: notification.read,
-        id: notificationId
-      });
     }
+  };
+
+  const closeDetailModal = () => {
+    setShowDetailModal(false);
+    setSelectedNotification(null);
   };
 
   const markAllAsRead = async () => {
@@ -76,12 +84,14 @@ export default function NotificationsScreen() {
     }
   };
 
-  const getNotificationGradient = (type: string) => {
+  const getNotificationGradient = (type: string): [string, string] => {
     switch (type) {
       case 'temperature_high': return ['#fa709a', '#fee140'];
       case 'motor_error': return ['#f093fb', '#f5576c'];
       case 'auto_mode': return ['#4facfe', '#00f2fe'];
-      case 'manual_control': return ['#43e97b', '#38f9d7'];
+      case 'manual_control': return ['#10b981', '#059669'];
+      case 'voice_control': return ['#667eea', '#764ba2'];
+      case 'voice_control_error': return ['#f5576c', '#f093fb'];
       default: return ['#667eea', '#764ba2'];
     }
   };
@@ -92,6 +102,8 @@ export default function NotificationsScreen() {
       case 'motor_error': return 'construct';
       case 'auto_mode': return 'settings';
       case 'manual_control': return 'hand-left';
+      case 'voice_control': return 'mic';
+      case 'voice_control_error': return 'mic-off';
       default: return 'information-circle';
     }
   };
@@ -144,6 +156,7 @@ export default function NotificationsScreen() {
   const unreadCount = notifications.filter((n: any) => !n.read).length;
 
   return (
+    <>
     <ScrollView 
       style={styles.container}
       contentContainerStyle={{ paddingTop: insets.top + 20 }}
@@ -202,7 +215,7 @@ export default function NotificationsScreen() {
         <View style={styles.emptyContainer}>
           <View style={styles.emptyIcon}>
             <LinearGradient
-              colors={['#43e97b', '#38f9d7']}
+              colors={['#10b981', '#059669']}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
               style={styles.emptyIconGradient}
@@ -285,7 +298,7 @@ export default function NotificationsScreen() {
           <View style={styles.alertTypeItem}>
             <View style={styles.alertTypeIconContainer}>
               <LinearGradient
-                colors={['#43e97b', '#38f9d7']}
+                colors={['#10b981', '#059669']}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
                 style={styles.alertTypeIconGradient}
@@ -298,11 +311,105 @@ export default function NotificationsScreen() {
               <Text style={styles.alertTypeDesc}>User-initiated actions</Text>
             </View>
           </View>
+
+          <View style={styles.alertTypeItem}>
+            <View style={styles.alertTypeIconContainer}>
+              <LinearGradient
+                colors={['#667eea', '#764ba2']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.alertTypeIconGradient}
+              >
+                <Ionicons name="mic" size={20} color="#FFFFFF" />
+              </LinearGradient>
+            </View>
+            <View style={styles.alertTypeContent}>
+              <Text style={styles.alertTypeTitle}>Voice Control</Text>
+              <Text style={styles.alertTypeDesc}>Voice command executed</Text>
+            </View>
+          </View>
         </View>
       </View>
 
       <View style={{ height: 100 }} />
     </ScrollView>
+
+      {/* Detail Modal */}
+      <Modal
+        visible={showDetailModal}
+        transparent
+        animationType="fade"
+        onRequestClose={closeDetailModal}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            {selectedNotification && (
+              <>
+                {/* Icon */}
+                <View style={styles.modalIconContainer}>
+                  <LinearGradient
+                    colors={getNotificationGradient(selectedNotification.type)}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={styles.modalIconGradient}
+                  >
+                    <Ionicons 
+                      name={getNotificationIcon(selectedNotification.type)} 
+                      size={48} 
+                      color="#FFFFFF" 
+                    />
+                  </LinearGradient>
+                </View>
+
+                {/* Title */}
+                <Text style={styles.modalTitle}>{selectedNotification.title}</Text>
+
+                {/* Message */}
+                <Text style={styles.modalMessage}>{selectedNotification.message}</Text>
+
+                {/* Timestamp */}
+                <View style={styles.modalTimestamp}>
+                  <Ionicons name="time-outline" size={16} color="#8F9BB3" />
+                  <Text style={styles.modalTime}>
+                    {new Date(selectedNotification.timestamp).toLocaleString('id-ID', {
+                      weekday: 'long',
+                      year: 'numeric',
+                      month: 'long',
+                      day: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit'
+                    })}
+                  </Text>
+                </View>
+
+                {/* Type Badge */}
+                <View style={styles.modalTypeBadge}>
+                  <Text style={styles.modalTypeText}>
+                    {selectedNotification.type.replace(/_/g, ' ').toUpperCase()}
+                  </Text>
+                </View>
+
+                {/* Close Button */}
+                <TouchableOpacity 
+                  style={styles.modalCloseButton} 
+                  onPress={closeDetailModal}
+                  activeOpacity={0.8}
+                >
+                  <LinearGradient
+                    colors={['#667eea', '#764ba2']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={styles.modalCloseGradient}
+                  >
+                    <Text style={styles.modalCloseText}>Close</Text>
+                  </LinearGradient>
+                </TouchableOpacity>
+              </>
+            )}
+          </View>
+        </View>
+      </Modal>
+    </>
   );
 }
 
@@ -413,7 +520,7 @@ const styles = StyleSheet.create({
     borderRadius: 60,
     overflow: 'hidden',
     marginBottom: 24,
-    shadowColor: '#43e97b',
+    shadowColor: '#10b981',
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.3,
     shadowRadius: 16,
@@ -585,5 +692,108 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#8F9BB3',
     fontWeight: '500',
+  },
+  // Modal styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  modalContent: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 32,
+    padding: 32,
+    width: '100%',
+    maxWidth: 400,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.3,
+    shadowRadius: 32,
+    elevation: 16,
+  },
+  modalIconContainer: {
+    width: 96,
+    height: 96,
+    borderRadius: 48,
+    overflow: 'hidden',
+    marginBottom: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.2,
+    shadowRadius: 16,
+    elevation: 8,
+  },
+  modalIconGradient: {
+    width: '100%',
+    height: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalTitle: {
+    fontSize: 24,
+    fontWeight: '800',
+    color: '#2E3A59',
+    textAlign: 'center',
+    marginBottom: 16,
+    letterSpacing: -0.5,
+  },
+  modalMessage: {
+    fontSize: 16,
+    color: '#8F9BB3',
+    textAlign: 'center',
+    lineHeight: 24,
+    marginBottom: 20,
+    fontWeight: '500',
+  },
+  modalTimestamp: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    backgroundColor: '#F8F9FA',
+    borderRadius: 12,
+  },
+  modalTime: {
+    fontSize: 13,
+    color: '#8F9BB3',
+    fontWeight: '600',
+  },
+  modalTypeBadge: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    backgroundColor: '#F0F4FF',
+    borderRadius: 12,
+    marginBottom: 24,
+  },
+  modalTypeText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#667eea',
+    letterSpacing: 1,
+  },
+  modalCloseButton: {
+    width: '100%',
+    borderRadius: 16,
+    overflow: 'hidden',
+    shadowColor: '#667eea',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 6,
+  },
+  modalCloseGradient: {
+    paddingVertical: 16,
+    alignItems: 'center',
+  },
+  modalCloseText: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    letterSpacing: 0.5,
   },
 });
