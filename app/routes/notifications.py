@@ -11,6 +11,7 @@ from bson import ObjectId
 
 notifications_bp = Blueprint('notifications', __name__)
 
+@notifications_bp.route('', methods=['GET'])
 @notifications_bp.route('/', methods=['GET'])
 @jwt_required()
 def get_notifications():
