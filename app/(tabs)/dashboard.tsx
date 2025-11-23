@@ -148,7 +148,7 @@ export default function DashboardScreen() {
           style={styles.heroGradient}
         >
           <Text style={styles.heroGreeting}>{getGreeting()}</Text>
-          <Text style={styles.heroTitle}>Smart Home Control</Text>
+          <Text style={styles.heroTitle}>Smart Curtain Control</Text>
           <Text style={styles.heroSubtitle}>Everything at your fingertips</Text>
         </LinearGradient>
       </View>
