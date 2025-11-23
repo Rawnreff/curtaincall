@@ -19,9 +19,10 @@ def get_auto_mode_rules():
         
         if not rules:
             # Return default rules if user doesn't have custom rules
+            # Values in Lux (standard light measurement unit)
             default_rules = {
-                'light_open_threshold': 250,
-                'light_close_threshold': 500,
+                'light_open_threshold': 250,   # Open curtain when < 250 lux (dark)
+                'light_close_threshold': 500,  # Close curtain when > 500 lux (bright)
                 'temperature_threshold': 35.0,
                 'enabled': True
             }
@@ -104,6 +105,9 @@ def update_auto_mode_rules():
         
         print(f"✅ Auto mode rules updated for user {user_id}: {update_data}")
         
+        # Publish updated rules to MQTT for ESP32
+        publish_rules_to_mqtt(update_data)
+        
         return jsonify({
             'success': True,
             'message': 'Auto mode rules updated successfully',
@@ -117,5 +121,40 @@ def update_auto_mode_rules():
         import traceback
         traceback.print_exc()
         return jsonify({'error': 'Failed to update auto mode rules'}), 500
+
+def publish_rules_to_mqtt(rules):
+    """Publish auto mode rules to MQTT for ESP32"""
+    try:
+        from app import get_mqtt_client
+        import json
+        
+        mqtt_client = get_mqtt_client()
+        
+        # Prepare MQTT message
+        mqtt_message = {
+            'rules': {
+                'light_open_threshold': rules['light_open_threshold'],
+                'light_close_threshold': rules['light_close_threshold'],
+                'temperature_threshold': rules['temperature_threshold'],
+                'enabled': rules['enabled']
+            },
+            'timestamp': datetime.utcnow().isoformat()
+        }
+        
+        # Publish to /curtain/rules topic
+        topic = "/curtain/rules"
+        message = json.dumps(mqtt_message)
+        
+        result = mqtt_client.publish(topic, message, qos=1)
+        
+        if result.rc == 0:
+            print(f"✅ Published auto mode rules to MQTT: {topic}")
+        else:
+            print(f"❌ Failed to publish rules to MQTT: {result.rc}")
+            
+    except Exception as e:
+        print(f"❌ Error publishing rules to MQTT: {e}")
+        import traceback
+        traceback.print_exc()
 
 

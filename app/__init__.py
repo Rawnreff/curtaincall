@@ -101,6 +101,9 @@ def setup_mqtt(app):
         if rc == 0:
             print("✅ MQTT Connected successfully")
             client.subscribe("/curtain/data")
+            client.subscribe("/curtain/rules/request")
+            print("📬 Subscribed to /curtain/data")
+            print("📬 Subscribed to /curtain/rules/request")
         else:
             print(f"❌ MQTT Connection failed with code {rc}")
     
@@ -127,8 +130,56 @@ def handle_mqtt_message(topic, message):
         if topic == "/curtain/data":
             from app.models.sensor_model import process_sensor_data
             process_sensor_data(message)
+        elif topic == "/curtain/rules/request":
+            # ESP32 requesting auto mode rules
+            handle_rules_request(message)
     except Exception as e:
         print(f"❌ Error handling MQTT message: {e}")
+
+def handle_rules_request(message):
+    """Handle auto mode rules request from ESP32"""
+    try:
+        import json
+        from datetime import datetime
+        
+        # Get default rules from database or use system defaults
+        db = get_db()
+        rules_collection = db.get_collection('auto_mode_rules')
+        
+        # Get the most recent rules (could be user-specific or default)
+        rules = rules_collection.find_one(sort=[('updated_at', -1)])
+        
+        if not rules:
+            # Use default rules
+            rules = {
+                'light_open_threshold': 250,
+                'light_close_threshold': 500,
+                'temperature_threshold': 35.0,
+                'enabled': True
+            }
+        
+        # Prepare MQTT message
+        mqtt_message = {
+            'rules': {
+                'light_open_threshold': rules.get('light_open_threshold', 250),
+                'light_close_threshold': rules.get('light_close_threshold', 500),
+                'temperature_threshold': rules.get('temperature_threshold', 35.0),
+                'enabled': rules.get('enabled', True)
+            },
+            'timestamp': datetime.utcnow().isoformat()
+        }
+        
+        # Publish rules to ESP32
+        topic = "/curtain/rules"
+        message = json.dumps(mqtt_message)
+        mqtt_client.publish(topic, message, qos=1)
+        
+        print(f"✅ Sent auto mode rules to ESP32: {mqtt_message['rules']}")
+        
+    except Exception as e:
+        print(f"❌ Error handling rules request: {e}")
+        import traceback
+        traceback.print_exc()
 
 def register_blueprints(app):
     """Register all blueprints"""
