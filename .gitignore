@@ -1,2 +1,27 @@
+# Environment files
 .env
-/__pycache__
+
+# Python cache files
+__pycache__/
+*.pyc
+*.pyo
+
+# Virtual environment
+venv/
+env/
+
+# Uploads and temporary files
+uploads/
+*.tmp
+*.log
+
+# IDE-specific files
+.vscode/
+.idea/
+
+# OS-specific files
+.DS_Store
+Thumbs.db
+
+# Dependency files
+*.egg-info/
