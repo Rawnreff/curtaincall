@@ -291,7 +291,7 @@ export default function DashboardScreen() {
             </TouchableOpacity>
           ) : sleepModeActive ? (
             <TouchableOpacity 
-              style={styles.quickActionButtonOpen}
+              style={styles.quickActionButtonOpenSleep}
               onPress={handleDeactivateSleepMode}
               disabled={quickOpenLoading}
               activeOpacity={0.8}
@@ -596,6 +596,16 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     overflow: 'hidden',
     shadowColor: '#10b981',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  quickActionButtonOpenSleep: {
+    flex: 1,
+    borderRadius: 16,
+    overflow: 'hidden',
+    shadowColor: '#6366f1',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
