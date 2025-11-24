@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl, Modal } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import { notificationService } from '../services/notificationService';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
@@ -16,6 +17,13 @@ export default function NotificationsScreen() {
   useEffect(() => {
     loadNotifications();
   }, []);
+
+  // Reload notifications when screen comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      loadNotifications();
+    }, [])
+  );
 
   const loadNotifications = async () => {
     try {
@@ -89,9 +97,16 @@ export default function NotificationsScreen() {
       case 'temperature_high': return ['#fa709a', '#fee140'];
       case 'motor_error': return ['#f093fb', '#f5576c'];
       case 'auto_mode': return ['#4facfe', '#00f2fe'];
+      case 'auto_mode_control': return ['#667eea', '#764ba2'];
+      case 'auto_mode_settings': return ['#10b981', '#059669'];
       case 'manual_control': return ['#10b981', '#059669'];
       case 'voice_control': return ['#667eea', '#764ba2'];
       case 'voice_control_error': return ['#f5576c', '#f093fb'];
+      case 'pir_motion': return ['#FFA726', '#FF7043'];
+      case 'pir_settings': return ['#FFA726', '#FF7043'];
+      case 'sleep_mode': return ['#6366f1', '#4f46e5'];
+      case 'sleep_mode_activated': return ['#6366f1', '#4f46e5'];
+      case 'sleep_mode_deactivated': return ['#10b981', '#059669'];
       default: return ['#667eea', '#764ba2'];
     }
   };
@@ -100,10 +115,17 @@ export default function NotificationsScreen() {
     switch (type) {
       case 'temperature_high': return 'thermometer';
       case 'motor_error': return 'construct';
-      case 'auto_mode': return 'settings';
+      case 'auto_mode': return 'flash';
+      case 'auto_mode_control': return 'power';
+      case 'auto_mode_settings': return 'settings';
       case 'manual_control': return 'hand-left';
       case 'voice_control': return 'mic';
       case 'voice_control_error': return 'mic-off';
+      case 'pir_motion': return 'walk';
+      case 'pir_settings': return 'walk';
+      case 'sleep_mode': return 'moon';
+      case 'sleep_mode_activated': return 'moon';
+      case 'sleep_mode_deactivated': return 'moon-outline';
       default: return 'information-circle';
     }
   };
@@ -257,24 +279,7 @@ export default function NotificationsScreen() {
             </View>
             <View style={styles.alertTypeContent}>
               <Text style={styles.alertTypeTitle}>High Temperature</Text>
-              <Text style={styles.alertTypeDesc}>Temperature above 35°C</Text>
-            </View>
-          </View>
-
-          <View style={styles.alertTypeItem}>
-            <View style={styles.alertTypeIconContainer}>
-              <LinearGradient
-                colors={['#f093fb', '#f5576c']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={styles.alertTypeIconGradient}
-              >
-                <Ionicons name="construct" size={20} color="#FFFFFF" />
-              </LinearGradient>
-            </View>
-            <View style={styles.alertTypeContent}>
-              <Text style={styles.alertTypeTitle}>Motor Error</Text>
-              <Text style={styles.alertTypeDesc}>Mechanical issues detected</Text>
+              <Text style={styles.alertTypeDesc}>Temperature above threshold</Text>
             </View>
           </View>
 
@@ -286,12 +291,46 @@ export default function NotificationsScreen() {
                 end={{ x: 1, y: 1 }}
                 style={styles.alertTypeIconGradient}
               >
+                <Ionicons name="flash" size={20} color="#FFFFFF" />
+              </LinearGradient>
+            </View>
+            <View style={styles.alertTypeContent}>
+              <Text style={styles.alertTypeTitle}>Auto Mode Action</Text>
+              <Text style={styles.alertTypeDesc}>Automatic curtain adjustments</Text>
+            </View>
+          </View>
+
+          <View style={styles.alertTypeItem}>
+            <View style={styles.alertTypeIconContainer}>
+              <LinearGradient
+                colors={['#667eea', '#764ba2']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.alertTypeIconGradient}
+              >
+                <Ionicons name="power" size={20} color="#FFFFFF" />
+              </LinearGradient>
+            </View>
+            <View style={styles.alertTypeContent}>
+              <Text style={styles.alertTypeTitle}>Auto Mode Control</Text>
+              <Text style={styles.alertTypeDesc}>Auto mode enabled/disabled</Text>
+            </View>
+          </View>
+
+          <View style={styles.alertTypeItem}>
+            <View style={styles.alertTypeIconContainer}>
+              <LinearGradient
+                colors={['#10b981', '#059669']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.alertTypeIconGradient}
+              >
                 <Ionicons name="settings" size={20} color="#FFFFFF" />
               </LinearGradient>
             </View>
             <View style={styles.alertTypeContent}>
-              <Text style={styles.alertTypeTitle}>Auto Mode</Text>
-              <Text style={styles.alertTypeDesc}>Automatic adjustments made</Text>
+              <Text style={styles.alertTypeTitle}>Auto Mode Settings</Text>
+              <Text style={styles.alertTypeDesc}>Threshold settings updated</Text>
             </View>
           </View>
 
@@ -326,6 +365,91 @@ export default function NotificationsScreen() {
             <View style={styles.alertTypeContent}>
               <Text style={styles.alertTypeTitle}>Voice Control</Text>
               <Text style={styles.alertTypeDesc}>Voice command executed</Text>
+            </View>
+          </View>
+
+          <View style={styles.alertTypeItem}>
+            <View style={styles.alertTypeIconContainer}>
+              <LinearGradient
+                colors={['#f5576c', '#f093fb']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.alertTypeIconGradient}
+              >
+                <Ionicons name="mic-off" size={20} color="#FFFFFF" />
+              </LinearGradient>
+            </View>
+            <View style={styles.alertTypeContent}>
+              <Text style={styles.alertTypeTitle}>Voice Control Error</Text>
+              <Text style={styles.alertTypeDesc}>Voice command failed</Text>
+            </View>
+          </View>
+
+          <View style={styles.alertTypeItem}>
+            <View style={styles.alertTypeIconContainer}>
+              <LinearGradient
+                colors={['#FFA726', '#FF7043']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.alertTypeIconGradient}
+              >
+                <Ionicons name="walk" size={20} color="#FFFFFF" />
+              </LinearGradient>
+            </View>
+            <View style={styles.alertTypeContent}>
+              <Text style={styles.alertTypeTitle}>Motion Detected</Text>
+              <Text style={styles.alertTypeDesc}>PIR sensor triggered</Text>
+            </View>
+          </View>
+
+          <View style={styles.alertTypeItem}>
+            <View style={styles.alertTypeIconContainer}>
+              <LinearGradient
+                colors={['#FFA726', '#FF7043']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.alertTypeIconGradient}
+              >
+                <Ionicons name="walk" size={20} color="#FFFFFF" />
+              </LinearGradient>
+            </View>
+            <View style={styles.alertTypeContent}>
+              <Text style={styles.alertTypeTitle}>PIR Settings</Text>
+              <Text style={styles.alertTypeDesc}>Motion detection enabled/disabled</Text>
+            </View>
+          </View>
+
+          <View style={styles.alertTypeItem}>
+            <View style={styles.alertTypeIconContainer}>
+              <LinearGradient
+                colors={['#f093fb', '#f5576c']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.alertTypeIconGradient}
+              >
+                <Ionicons name="construct" size={20} color="#FFFFFF" />
+              </LinearGradient>
+            </View>
+            <View style={styles.alertTypeContent}>
+              <Text style={styles.alertTypeTitle}>Motor Error</Text>
+              <Text style={styles.alertTypeDesc}>Mechanical issues detected</Text>
+            </View>
+          </View>
+
+          <View style={styles.alertTypeItem}>
+            <View style={styles.alertTypeIconContainer}>
+              <LinearGradient
+                colors={['#6366f1', '#4f46e5']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.alertTypeIconGradient}
+              >
+                <Ionicons name="moon" size={20} color="#FFFFFF" />
+              </LinearGradient>
+            </View>
+            <View style={styles.alertTypeContent}>
+              <Text style={styles.alertTypeTitle}>Sleep Mode</Text>
+              <Text style={styles.alertTypeDesc}>Sleep mode activated/deactivated</Text>
             </View>
           </View>
         </View>

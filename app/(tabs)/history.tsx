@@ -77,7 +77,7 @@ export default function HistoryScreen() {
   );
 
   const calculateStats = () => {
-    if (history.length === 0) return { maxTemp: 0, minTemp: 0, maxLight: 0, minLight: 0, avgTemp: 0, avgHumidity: 0 };
+    if (history.length === 0) return { maxTemp: 0, minTemp: 0, avgLight: 0, avgTemp: 0, avgHumidity: 0 };
     
     const temps = history.map((h: any) => h.suhu || 0);
     const lights = history.map((h: any) => h.cahaya || 0);
@@ -86,8 +86,7 @@ export default function HistoryScreen() {
     return {
       maxTemp: Math.max(...temps),
       minTemp: Math.min(...temps),
-      maxLight: Math.max(...lights),
-      minLight: Math.min(...lights),
+      avgLight: (lights.reduce((a, b) => a + b, 0) / lights.length),
       avgTemp: (temps.reduce((a, b) => a + b, 0) / temps.length),
       avgHumidity: (humidity.reduce((a, b) => a + b, 0) / humidity.length),
     };
@@ -188,8 +187,8 @@ export default function HistoryScreen() {
                 style={styles.statCardGradient}
               >
                 <Ionicons name="sunny" size={28} color="#FFFFFF" />
-                <Text style={styles.statValue}>{stats.maxLight}</Text>
-                <Text style={styles.statLabel}>Max Light (lux)</Text>
+                <Text style={styles.statValue}>{stats.avgLight.toFixed(0)}</Text>
+                <Text style={styles.statLabel}>Avg Light (lux)</Text>
               </LinearGradient>
             </View>
 

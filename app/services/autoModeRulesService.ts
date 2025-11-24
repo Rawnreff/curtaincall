@@ -1,9 +1,19 @@
 import api from './api';
 
 export interface AutoModeRules {
+  // Control flags
+  temperature_control_enabled: boolean;
+  humidity_control_enabled: boolean;
+  light_control_enabled: boolean;
+  pir_enabled: boolean;
+  
+  // Thresholds
+  temperature_high_threshold: number;
+  humidity_high_threshold: number;
   light_open_threshold: number;
   light_close_threshold: number;
-  temperature_threshold: number;
+  
+  // Master switch
   enabled: boolean;
 }
 

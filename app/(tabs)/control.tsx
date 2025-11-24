@@ -1,9 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Alert, ScrollView, Animated, TextInput, Switch } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import { useControl } from '../contexts/ControlContext';
 import { useSensor } from '../contexts/SensorContext';
 import { autoModeRulesService, AutoModeRules } from '../services/autoModeRulesService';
+import { getSleepModeStatus, activateSleepMode, deactivateSleepMode, updatePIRSettings } from '../services/pirSleepService';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -13,14 +15,21 @@ export default function ControlScreen() {
   const insets = useSafeAreaInsets();
   const [loading, setLoading] = useState<string | null>(null);
   const [rules, setRules] = useState<AutoModeRules>({
+    temperature_control_enabled: true,
+    humidity_control_enabled: true,
+    light_control_enabled: true,
+    pir_enabled: true,
+    temperature_high_threshold: 35.0,
+    humidity_high_threshold: 80.0,
     light_open_threshold: 250,
     light_close_threshold: 500,
-    temperature_threshold: 35.0,
     enabled: true,
   });
   const [editingRules, setEditingRules] = useState<AutoModeRules>(rules);
   const [isEditingRules, setIsEditingRules] = useState(false);
   const [rulesLoading, setRulesLoading] = useState(false);
+  const [sleepModeActive, setSleepModeActive] = useState(false);
+  const [sleepModeLoading, setSleepModeLoading] = useState(false);
   const scaleAnim = new Animated.Value(1);
 
   // Helper function to safely determine if auto mode is active
@@ -32,7 +41,15 @@ export default function ControlScreen() {
 
   useEffect(() => {
     loadRules();
+    loadSleepModeStatus();
   }, []);
+
+  // Reload sleep mode status when screen comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      loadSleepModeStatus();
+    }, [])
+  );
 
   const loadRules = async () => {
     try {
@@ -48,6 +65,62 @@ export default function ControlScreen() {
     }
   };
 
+  const loadSleepModeStatus = async () => {
+    try {
+      const status = await getSleepModeStatus();
+      setSleepModeActive(status.active);
+    } catch (error: any) {
+      console.error('Error loading sleep mode status:', error);
+    }
+  };
+
+  const handleToggleSleepMode = async () => {
+    if (sleepModeLoading) return;
+
+    try {
+      setSleepModeLoading(true);
+      
+      if (sleepModeActive) {
+        // Deactivate sleep mode
+        const response = await deactivateSleepMode();
+        setSleepModeActive(false);
+        Alert.alert('Sleep Mode Deactivated', response.message);
+        // Reload rules to get restored settings
+        await loadRules();
+      } else {
+        // Activate sleep mode - show confirmation
+        Alert.alert(
+          'Activate Sleep Mode?',
+          'This will close the curtain and disable all automated functions (PIR, auto mode, manual control).',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            {
+              text: 'Activate',
+              style: 'destructive',
+              onPress: async () => {
+                try {
+                  const response = await activateSleepMode();
+                  setSleepModeActive(true);
+                  Alert.alert('Sleep Mode Activated', response.message);
+                  // Refresh sensor data to show closed curtain
+                  await refreshData();
+                } catch (error: any) {
+                  Alert.alert('Error', error.response?.data?.message || 'Failed to activate sleep mode');
+                }
+              }
+            }
+          ]
+        );
+        return; // Exit early since we're showing confirmation dialog
+      }
+    } catch (error: any) {
+      console.error('Error toggling sleep mode:', error);
+      Alert.alert('Error', error.response?.data?.message || 'Failed to toggle sleep mode');
+    } finally {
+      setSleepModeLoading(false);
+    }
+  };
+
   const handleSaveRules = async () => {
     // Validate rules
     if (editingRules.light_open_threshold >= editingRules.light_close_threshold) {
@@ -57,6 +130,16 @@ export default function ControlScreen() {
 
     if (editingRules.light_open_threshold < 0 || editingRules.light_close_threshold < 0) {
       Alert.alert('Invalid Rules', 'Light thresholds must be positive');
+      return;
+    }
+
+    if (editingRules.temperature_high_threshold < 0 || editingRules.temperature_high_threshold > 100) {
+      Alert.alert('Invalid Rules', 'Temperature threshold must be between 0 and 100°C');
+      return;
+    }
+
+    if (editingRules.humidity_high_threshold < 0 || editingRules.humidity_high_threshold > 100) {
+      Alert.alert('Invalid Rules', 'Humidity threshold must be between 0 and 100%');
       return;
     }
 
@@ -79,19 +162,39 @@ export default function ControlScreen() {
     setIsEditingRules(false);
   };
 
-  const handleToggleEnabled = async (value: boolean) => {
-    const updatedRules = { ...rules, enabled: value };
+  const handleToggleControlType = async (controlType: 'temperature' | 'humidity' | 'light' | 'pir', value: boolean) => {
+    const fieldName = controlType === 'pir' 
+      ? 'pir_enabled' 
+      : `${controlType}_control_enabled` as keyof AutoModeRules;
+    const updatedRules = { ...rules, [fieldName]: value };
     setRules(updatedRules);
     
     try {
       setRulesLoading(true);
+      
+      // Update auto mode rules
       await autoModeRulesService.updateRules(updatedRules);
-      Alert.alert('Success', `Auto mode ${value ? 'enabled' : 'disabled'}`);
+      
+      // If PIR, also update pir_settings collection separately
+      if (controlType === 'pir') {
+        try {
+          await updatePIRSettings(value);
+          console.log('✅ PIR settings updated in pir_settings collection');
+        } catch (pirError) {
+          console.error('⚠️ Failed to update pir_settings collection:', pirError);
+          // Don't fail the whole operation if pir_settings update fails
+        }
+      }
+      
+      const controlName = controlType === 'pir' 
+        ? 'PIR Motion Detection' 
+        : controlType.charAt(0).toUpperCase() + controlType.slice(1) + ' control';
+      Alert.alert('Success', `${controlName} ${value ? 'enabled' : 'disabled'}`);
     } catch (error: any) {
-      console.error('Error toggling auto mode:', error);
+      console.error(`Error toggling ${controlType} control:`, error);
       // Revert on error
       setRules(rules);
-      Alert.alert('Error', error.response?.data?.error || 'Failed to update auto mode');
+      Alert.alert('Error', error.response?.data?.error || `Failed to update ${controlType} control`);
     } finally {
       setRulesLoading(false);
     }
@@ -171,13 +274,20 @@ export default function ControlScreen() {
   );
 
   const getModeIcon = () => {
+    if (sleepModeActive) return '🌙';
     if (sensorData?.status_tirai === 'Auto') return '🤖';
     return '👤';
   };
 
   const getModeColor = (): [string, string] => {
-    if (sensorData?.status_tirai === 'Auto') return ['#10b981', '#059669']; // Darker green for better readability
-    return ['#667eea', '#764ba2'];
+    if (sleepModeActive) return ['#6366f1', '#4f46e5']; // Purple for sleep mode
+    if (sensorData?.status_tirai === 'Auto') return ['#10b981', '#059669']; // Green for auto
+    return ['#667eea', '#764ba2']; // Blue for manual
+  };
+
+  const getCurrentMode = () => {
+    if (sleepModeActive) return 'Sleep Mode';
+    return sensorData?.status_tirai || 'Loading...';
   };
 
   return (
@@ -190,6 +300,42 @@ export default function ControlScreen() {
       <View style={styles.header}>
         <Text style={styles.title}>Control</Text>
         <Text style={styles.subtitle}>Manage your smart curtain</Text>
+      </View>
+
+      {/* Sleep Mode Card */}
+      <View style={styles.sleepModeCard}>
+        <LinearGradient
+          colors={sleepModeActive ? ['#6366f1', '#4f46e5'] : ['#374151', '#1f2937']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.sleepModeGradient}
+        >
+          <View style={styles.sleepModeContent}>
+            <View style={styles.sleepModeLeft}>
+              <Ionicons 
+                name={sleepModeActive ? "moon" : "moon-outline"} 
+                size={32} 
+                color="#fff" 
+              />
+              <View style={styles.sleepModeInfo}>
+                <Text style={styles.sleepModeTitle}>Sleep Mode</Text>
+                <Text style={styles.sleepModeDescription}>
+                  {sleepModeActive 
+                    ? 'All controls disabled' 
+                    : 'Disable all automation'}
+                </Text>
+              </View>
+            </View>
+            <Switch
+              value={sleepModeActive}
+              onValueChange={handleToggleSleepMode}
+              disabled={sleepModeLoading}
+              trackColor={{ false: 'rgba(255, 255, 255, 0.3)', true: 'rgba(255, 255, 255, 0.5)' }}
+              thumbColor="#FFFFFF"
+              ios_backgroundColor="rgba(255, 255, 255, 0.3)"
+            />
+          </View>
+        </LinearGradient>
       </View>
 
       {/* Current Mode Card */}
@@ -206,7 +352,7 @@ export default function ControlScreen() {
             </View>
             <View style={styles.modeInfo}>
               <Text style={styles.modeLabel}>Current Mode</Text>
-              <Text style={styles.modeValue}>{sensorData?.status_tirai || 'Loading...'}</Text>
+              <Text style={styles.modeValue}>{getCurrentMode()}</Text>
             </View>
           </View>
           <View style={styles.modeStatusIndicator}>
@@ -261,7 +407,7 @@ export default function ControlScreen() {
             mode="manual"
             action="open"
             colors={['#10b981', '#059669']}
-            disabled={sensorData?.posisi === 'Terbuka'}
+            disabled={sleepModeActive || sensorData?.posisi === 'Terbuka'}
           />
           <ControlButton
             title="Close Curtain"
@@ -269,15 +415,91 @@ export default function ControlScreen() {
             mode="manual"
             action="close"
             colors={['#fa709a', '#fee140']}
-            disabled={sensorData?.posisi === 'Tertutup'}
+            disabled={sleepModeActive || sensorData?.posisi === 'Tertutup'}
           />
         </View>
 
-        <View style={styles.infoBox}>
-          <Ionicons name="information-circle" size={20} color="#667eea" />
-          <Text style={styles.infoText}>
-            Manual control will override auto mode temporarily
-          </Text>
+        {sleepModeActive && (
+          <View style={[styles.infoBox, { backgroundColor: '#fef3c7' }]}>
+            <Ionicons name="moon" size={20} color="#f59e0b" />
+            <Text style={[styles.infoText, { color: '#92400e' }]}>
+              Sleep mode is active - All controls are disabled
+            </Text>
+          </View>
+        )}
+
+        {!sleepModeActive && (
+          <View style={styles.infoBox}>
+            <Ionicons name="information-circle" size={20} color="#667eea" />
+            <Text style={styles.infoText}>
+              Manual control will override auto mode temporarily
+            </Text>
+          </View>
+        )}
+      </View>
+
+      {/* PIR Motion Detection Section */}
+      <View style={styles.section}>
+        <View style={styles.sectionHeader}>
+          <Ionicons name="walk" size={24} color="#2E3A59" />
+          <Text style={styles.sectionTitle}>Motion Detection</Text>
+        </View>
+
+        <View style={[styles.pirCard, sleepModeActive && styles.pirCardDisabled]}>
+          <View style={styles.pirHeader}>
+            <View style={styles.pirIconContainer}>
+              <LinearGradient
+                colors={sleepModeActive ? ['#E0E0E0', '#BDBDBD'] : ['#FFA726', '#FF7043']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.pirIconGradient}
+              >
+                <Ionicons name="walk" size={24} color={sleepModeActive ? '#9E9E9E' : '#FFFFFF'} />
+              </LinearGradient>
+            </View>
+            <View style={styles.pirInfo}>
+              <Text style={[styles.pirTitle, sleepModeActive && styles.pirTitleDisabled]}>PIR Motion Sensor</Text>
+              <Text style={[styles.pirDescription, sleepModeActive && styles.pirDescriptionDisabled]}>
+                {sleepModeActive ? 'Disabled during sleep mode' : 'Automatically toggle curtain when motion detected'}
+              </Text>
+            </View>
+          </View>
+
+          <View style={styles.pirToggleContainer}>
+            <View style={styles.pirToggleInfo}>
+              <Text style={[styles.pirToggleLabel, sleepModeActive && styles.pirToggleLabelDisabled]}>
+                Motion Detection
+              </Text>
+              <Text style={[styles.pirToggleStatus, sleepModeActive && styles.pirToggleStatusDisabled]}>
+                {rules.pir_enabled ? 'Active' : 'Inactive'}
+              </Text>
+            </View>
+            <Switch
+              value={rules.pir_enabled}
+              onValueChange={(value) => handleToggleControlType('pir', value)}
+              disabled={rulesLoading || sleepModeActive}
+              trackColor={{ false: '#E4E9F2', true: '#FFA726' }}
+              thumbColor="#FFFFFF"
+            />
+          </View>
+
+          {sleepModeActive && (
+            <View style={[styles.infoBox, { backgroundColor: '#fef3c7' }]}>
+              <Ionicons name="moon" size={20} color="#f59e0b" />
+              <Text style={[styles.infoText, { color: '#92400e' }]}>
+                Sleep mode is active - Motion detection is disabled
+              </Text>
+            </View>
+          )}
+
+          {!sleepModeActive && (
+            <View style={styles.infoBox}>
+              <Ionicons name="information-circle" size={20} color="#FFA726" />
+              <Text style={styles.infoText}>
+                PIR sensor works independently from auto mode. When motion is detected, curtain will toggle automatically.
+              </Text>
+            </View>
+          )}
         </View>
       </View>
 
@@ -288,22 +510,22 @@ export default function ControlScreen() {
           <Text style={styles.sectionTitle}>Automation</Text>
         </View>
 
-        <View style={styles.autoModeCard}>
+        <View style={[styles.autoModeCard, sleepModeActive && styles.autoModeCardDisabled]}>
           <View style={styles.autoModeHeader}>
             <View style={styles.autoModeIconContainer}>
               <LinearGradient
-                colors={['#667eea', '#764ba2']}
+                colors={sleepModeActive ? ['#E0E0E0', '#BDBDBD'] : ['#667eea', '#764ba2']}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
                 style={styles.autoModeIconGradient}
               >
-                <Ionicons name="sunny" size={24} color="#FFFFFF" />
+                <Ionicons name="sunny" size={24} color={sleepModeActive ? '#9E9E9E' : '#FFFFFF'} />
               </LinearGradient>
             </View>
             <View style={styles.autoModeInfo}>
-              <Text style={styles.autoModeTitle}>Smart Auto Mode</Text>
-              <Text style={styles.autoModeDescription}>
-                Adjusts based on light intensity
+              <Text style={[styles.autoModeTitle, sleepModeActive && styles.autoModeTitleDisabled]}>Smart Auto Mode</Text>
+              <Text style={[styles.autoModeDescription, sleepModeActive && styles.autoModeDescriptionDisabled]}>
+                {sleepModeActive ? 'Disabled during sleep mode' : 'Adjusts based on temperature, humidity, and light'}
               </Text>
             </View>
           </View>
@@ -327,14 +549,17 @@ export default function ControlScreen() {
             <TouchableOpacity
               style={[
                 styles.autoModeButton,
-                isAutoMode() && styles.autoModeButtonActive
+                isAutoMode() && styles.autoModeButtonActive,
+                sleepModeActive && styles.autoModeButtonDisabled
               ]}
               onPress={() => handleCommand('auto', 'enable')}
-              disabled={isAutoMode() || loading === 'enable'}
+              disabled={sleepModeActive || isAutoMode() || loading === 'enable'}
             >
               <LinearGradient
                 colors={
-                  isAutoMode() 
+                  sleepModeActive
+                    ? ['#E0E0E0', '#BDBDBD']
+                    : isAutoMode() 
                     ? ['#10b981', '#059669'] 
                     : ['#F1F3F5', '#F1F3F5']
                 }
@@ -367,14 +592,17 @@ export default function ControlScreen() {
             <TouchableOpacity
               style={[
                 styles.autoModeButton,
-                !isAutoMode() && styles.autoModeButtonActive
+                !isAutoMode() && styles.autoModeButtonActive,
+                sleepModeActive && styles.autoModeButtonDisabled
               ]}
               onPress={() => handleCommand('auto', 'disable')}
-              disabled={!isAutoMode() || loading === 'disable'}
+              disabled={sleepModeActive || !isAutoMode() || loading === 'disable'}
             >
               <LinearGradient
                 colors={
-                  !isAutoMode() 
+                  sleepModeActive
+                    ? ['#E0E0E0', '#BDBDBD']
+                    : !isAutoMode() 
                     ? ['#667eea', '#764ba2'] 
                     : ['#F1F3F5', '#F1F3F5']
                 }
@@ -404,17 +632,39 @@ export default function ControlScreen() {
               </LinearGradient>
             </TouchableOpacity>
           </View>
+
+          {sleepModeActive && (
+            <View style={[styles.infoBox, { backgroundColor: '#fef3c7' }]}>
+              <Ionicons name="moon" size={20} color="#f59e0b" />
+              <Text style={[styles.infoText, { color: '#92400e' }]}>
+                Sleep mode is active - Auto mode controls are disabled
+              </Text>
+            </View>
+          )}
+
+          {!sleepModeActive && (
+            <View style={styles.infoBox}>
+              <Ionicons name="information-circle" size={20} color="#667eea" />
+              <Text style={styles.infoText}>
+                Use the toggles below to enable/disable specific auto mode controls
+              </Text>
+            </View>
+          )}
         </View>
       </View>
 
       {/* Auto Mode Rules */}
-      <View style={styles.rulesCard}>
+      <View style={[styles.rulesCard, sleepModeActive && styles.rulesCardDisabled]}>
         <View style={styles.rulesHeader}>
-          <Ionicons name="bulb" size={24} color="#667eea" />
-          <Text style={styles.rulesTitle}>Auto Mode Rules</Text>
+          <Ionicons name="bulb" size={24} color={sleepModeActive ? '#9E9E9E' : '#667eea'} />
+          <Text style={[styles.rulesTitle, sleepModeActive && styles.rulesTitleDisabled]}>Auto Mode Rules</Text>
           {!isEditingRules ? (
-            <TouchableOpacity onPress={() => setIsEditingRules(true)} activeOpacity={0.7}>
-              <Ionicons name="create-outline" size={24} color="#667eea" />
+            <TouchableOpacity 
+              onPress={() => setIsEditingRules(true)} 
+              activeOpacity={0.7}
+              disabled={sleepModeActive}
+            >
+              <Ionicons name="create-outline" size={24} color={sleepModeActive ? '#9E9E9E' : '#667eea'} />
             </TouchableOpacity>
           ) : (
             <View style={styles.rulesActionButtons}>
@@ -433,30 +683,115 @@ export default function ControlScreen() {
           )}
         </View>
 
-        {/* Enable/Disable Toggle */}
-        <View style={styles.ruleToggleContainer}>
-          <View style={styles.ruleToggleContent}>
-            <Text style={styles.ruleToggleLabel}>Enable Auto Mode</Text>
-            <Text style={styles.ruleToggleDescription}>Automatically control curtain based on light sensor</Text>
-          </View>
-          <Switch
-            value={isEditingRules ? editingRules.enabled : rules.enabled}
-            onValueChange={(value) => {
-              if (isEditingRules) {
-                setEditingRules({ ...editingRules, enabled: value });
-              } else {
-                handleToggleEnabled(value);
-              }
-            }}
-            disabled={rulesLoading}
-            trackColor={{ false: '#E4E9F2', true: '#667eea' }}
-            thumbColor="#FFFFFF"
-          />
-        </View>
-        
         {isEditingRules ? (
           <>
-            {/* Editable Rules */}
+            {sleepModeActive && (
+              <View style={[styles.infoBox, { backgroundColor: '#fef3c7', marginBottom: 16 }]}>
+                <Ionicons name="moon" size={20} color="#f59e0b" />
+                <Text style={[styles.infoText, { color: '#92400e' }]}>
+                  Sleep mode is active - Auto mode rules are disabled
+                </Text>
+              </View>
+            )}
+
+            {/* Temperature Control */}
+            <View style={[styles.controlTypeHeader, sleepModeActive && styles.controlTypeHeaderDisabled]}>
+              <Ionicons name="thermometer" size={20} color={sleepModeActive ? '#9E9E9E' : '#f5576c'} />
+              <Text style={[styles.controlTypeTitle, sleepModeActive && styles.controlTypeTitleDisabled]}>Temperature Control (Priority 1)</Text>
+              <Switch
+                value={editingRules.temperature_control_enabled}
+                onValueChange={(value) => setEditingRules({ ...editingRules, temperature_control_enabled: value })}
+                disabled={sleepModeActive}
+                trackColor={{ false: '#E4E9F2', true: sleepModeActive ? '#BDBDBD' : '#f5576c' }}
+                thumbColor="#FFFFFF"
+              />
+            </View>
+            <View style={styles.ruleItemEditable}>
+              <View style={styles.ruleIconContainer}>
+                <LinearGradient
+                  colors={['#f093fb', '#f5576c']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.ruleIconGradient}
+                >
+                  <Ionicons name="thermometer" size={20} color="#FFFFFF" />
+                </LinearGradient>
+              </View>
+              <View style={styles.ruleContentEditable}>
+                <Text style={styles.ruleText}>High Temperature Threshold</Text>
+                <Text style={styles.ruleDescription}>Close curtain when temperature exceeds this value</Text>
+                <View style={styles.inputContainer}>
+                  <TextInput
+                    style={styles.ruleInput}
+                    value={editingRules.temperature_high_threshold.toString()}
+                    onChangeText={(text) => {
+                      const value = parseFloat(text) || 0;
+                      setEditingRules({ ...editingRules, temperature_high_threshold: value });
+                    }}
+                    keyboardType="numeric"
+                    placeholder="35.0"
+                    editable={editingRules.temperature_control_enabled}
+                  />
+                  <Text style={styles.inputUnit}>°C</Text>
+                </View>
+              </View>
+            </View>
+
+            {/* Humidity Control */}
+            <View style={[styles.controlTypeHeader, sleepModeActive && styles.controlTypeHeaderDisabled]}>
+              <Ionicons name="water" size={20} color={sleepModeActive ? '#9E9E9E' : '#10b981'} />
+              <Text style={[styles.controlTypeTitle, sleepModeActive && styles.controlTypeTitleDisabled]}>Humidity Control (Priority 2)</Text>
+              <Switch
+                value={editingRules.humidity_control_enabled}
+                onValueChange={(value) => setEditingRules({ ...editingRules, humidity_control_enabled: value })}
+                disabled={sleepModeActive}
+                trackColor={{ false: '#E4E9F2', true: sleepModeActive ? '#BDBDBD' : '#10b981' }}
+                thumbColor="#FFFFFF"
+              />
+            </View>
+            <View style={styles.ruleItemEditable}>
+              <View style={styles.ruleIconContainer}>
+                <LinearGradient
+                  colors={['#10b981', '#059669']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.ruleIconGradient}
+                >
+                  <Ionicons name="water" size={20} color="#FFFFFF" />
+                </LinearGradient>
+              </View>
+              <View style={styles.ruleContentEditable}>
+                <Text style={styles.ruleText}>High Humidity Threshold</Text>
+                <Text style={styles.ruleDescription}>Open curtain when humidity exceeds this value</Text>
+                <View style={styles.inputContainer}>
+                  <TextInput
+                    style={styles.ruleInput}
+                    value={editingRules.humidity_high_threshold.toString()}
+                    onChangeText={(text) => {
+                      const value = parseFloat(text) || 0;
+                      setEditingRules({ ...editingRules, humidity_high_threshold: value });
+                    }}
+                    keyboardType="numeric"
+                    placeholder="80.0"
+                    editable={editingRules.humidity_control_enabled}
+                  />
+                  <Text style={styles.inputUnit}>%</Text>
+                </View>
+              </View>
+            </View>
+
+            {/* Light Control */}
+            <View style={[styles.controlTypeHeader, sleepModeActive && styles.controlTypeHeaderDisabled]}>
+              <Ionicons name="sunny" size={20} color={sleepModeActive ? '#9E9E9E' : '#fa709a'} />
+              <Text style={[styles.controlTypeTitle, sleepModeActive && styles.controlTypeTitleDisabled]}>Light Control (Priority 3)</Text>
+              <Switch
+                value={editingRules.light_control_enabled}
+                onValueChange={(value) => setEditingRules({ ...editingRules, light_control_enabled: value })}
+                disabled={sleepModeActive}
+                trackColor={{ false: '#E4E9F2', true: sleepModeActive ? '#BDBDBD' : '#fa709a' }}
+                thumbColor="#FFFFFF"
+              />
+            </View>
             <View style={styles.ruleItemEditable}>
               <View style={styles.ruleIconContainer}>
                 <LinearGradient
@@ -481,6 +816,7 @@ export default function ControlScreen() {
                     }}
                     keyboardType="numeric"
                     placeholder="500"
+                    editable={editingRules.light_control_enabled}
                   />
                   <Text style={styles.inputUnit}>lux</Text>
                 </View>
@@ -511,95 +847,126 @@ export default function ControlScreen() {
                     }}
                     keyboardType="numeric"
                     placeholder="250"
+                    editable={editingRules.light_control_enabled}
                   />
                   <Text style={styles.inputUnit}>lux</Text>
-                </View>
-              </View>
-            </View>
-
-            <View style={styles.ruleItemEditable}>
-              <View style={styles.ruleIconContainer}>
-                <LinearGradient
-                  colors={['#f093fb', '#f5576c']}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  style={styles.ruleIconGradient}
-                >
-                  <Ionicons name="thermometer" size={20} color="#FFFFFF" />
-                </LinearGradient>
-              </View>
-              <View style={styles.ruleContentEditable}>
-                <Text style={styles.ruleText}>Temperature Threshold</Text>
-                <Text style={styles.ruleDescription}>Alert when temperature exceeds this value</Text>
-                <View style={styles.inputContainer}>
-                  <TextInput
-                    style={styles.ruleInput}
-                    value={editingRules.temperature_threshold.toString()}
-                    onChangeText={(text) => {
-                      const value = parseFloat(text) || 0;
-                      setEditingRules({ ...editingRules, temperature_threshold: value });
-                    }}
-                    keyboardType="numeric"
-                    placeholder="35.0"
-                  />
-                  <Text style={styles.inputUnit}>°C</Text>
                 </View>
               </View>
             </View>
           </>
         ) : (
           <>
-            {/* Display Rules */}
-            <View style={styles.ruleItem}>
-              <View style={styles.ruleIconContainer}>
-                <LinearGradient
-                  colors={['#fa709a', '#fee140']}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  style={styles.ruleIconGradient}
-                >
-                  <Ionicons name="sunny" size={20} color="#FFFFFF" />
-                </LinearGradient>
-              </View>
-              <View style={styles.ruleContent}>
-                <Text style={styles.ruleText}>High Brightness</Text>
-                <Text style={styles.ruleValue}>Light {'>'} {rules.light_close_threshold} lux → Close curtain</Text>
-              </View>
+            {/* Temperature Control */}
+            <View style={[styles.controlTypeHeader, sleepModeActive && styles.controlTypeHeaderDisabled]}>
+              <Ionicons name="thermometer" size={20} color={sleepModeActive ? '#9E9E9E' : '#f5576c'} />
+              <Text style={[styles.controlTypeTitle, sleepModeActive && styles.controlTypeTitleDisabled]}>Temperature Control (Priority 1)</Text>
+              <Switch
+                value={rules.temperature_control_enabled}
+                onValueChange={(value) => handleToggleControlType('temperature', value)}
+                disabled={rulesLoading || sleepModeActive}
+                trackColor={{ false: '#E4E9F2', true: sleepModeActive ? '#BDBDBD' : '#f5576c' }}
+                thumbColor="#FFFFFF"
+              />
             </View>
+            {rules.temperature_control_enabled && (
+              <View style={[styles.ruleItem, sleepModeActive && styles.ruleItemDisabled]}>
+                <View style={styles.ruleIconContainer}>
+                  <LinearGradient
+                    colors={sleepModeActive ? ['#E0E0E0', '#BDBDBD'] : ['#f093fb', '#f5576c']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={styles.ruleIconGradient}
+                  >
+                    <Ionicons name="thermometer" size={20} color={sleepModeActive ? '#9E9E9E' : '#FFFFFF'} />
+                  </LinearGradient>
+                </View>
+                <View style={styles.ruleContent}>
+                  <Text style={[styles.ruleText, sleepModeActive && styles.ruleTextDisabled]}>High Temperature</Text>
+                  <Text style={[styles.ruleValue, sleepModeActive && styles.ruleValueDisabled]}>Temp {'>'} {rules.temperature_high_threshold}°C → Close curtain</Text>
+                </View>
+              </View>
+            )}
 
-            <View style={styles.ruleItem}>
-              <View style={styles.ruleIconContainer}>
-                <LinearGradient
-                  colors={['#667eea', '#764ba2']}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  style={styles.ruleIconGradient}
-                >
-                  <Ionicons name="moon" size={20} color="#FFFFFF" />
-                </LinearGradient>
-              </View>
-              <View style={styles.ruleContent}>
-                <Text style={styles.ruleText}>Low Brightness</Text>
-                <Text style={styles.ruleValue}>Light {'<'} {rules.light_open_threshold} lux → Open curtain</Text>
-              </View>
+            {/* Humidity Control */}
+            <View style={[styles.controlTypeHeader, sleepModeActive && styles.controlTypeHeaderDisabled]}>
+              <Ionicons name="water" size={20} color={sleepModeActive ? '#9E9E9E' : '#10b981'} />
+              <Text style={[styles.controlTypeTitle, sleepModeActive && styles.controlTypeTitleDisabled]}>Humidity Control (Priority 2)</Text>
+              <Switch
+                value={rules.humidity_control_enabled}
+                onValueChange={(value) => handleToggleControlType('humidity', value)}
+                disabled={rulesLoading || sleepModeActive}
+                trackColor={{ false: '#E4E9F2', true: sleepModeActive ? '#BDBDBD' : '#10b981' }}
+                thumbColor="#FFFFFF"
+              />
             </View>
+            {rules.humidity_control_enabled && (
+              <View style={[styles.ruleItem, sleepModeActive && styles.ruleItemDisabled]}>
+                <View style={styles.ruleIconContainer}>
+                  <LinearGradient
+                    colors={sleepModeActive ? ['#E0E0E0', '#BDBDBD'] : ['#10b981', '#059669']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={styles.ruleIconGradient}
+                  >
+                    <Ionicons name="water" size={20} color={sleepModeActive ? '#9E9E9E' : '#FFFFFF'} />
+                  </LinearGradient>
+                </View>
+                <View style={styles.ruleContent}>
+                  <Text style={[styles.ruleText, sleepModeActive && styles.ruleTextDisabled]}>High Humidity</Text>
+                  <Text style={[styles.ruleValue, sleepModeActive && styles.ruleValueDisabled]}>Humidity {'>'} {rules.humidity_high_threshold}% → Open curtain</Text>
+                </View>
+              </View>
+            )}
 
-            <View style={styles.ruleItem}>
-              <View style={styles.ruleIconContainer}>
-                <LinearGradient
-                  colors={['#f093fb', '#f5576c']}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  style={styles.ruleIconGradient}
-                >
-                  <Ionicons name="thermometer" size={20} color="#FFFFFF" />
-                </LinearGradient>
-              </View>
-              <View style={styles.ruleContent}>
-                <Text style={styles.ruleText}>Temperature Threshold</Text>
-                <Text style={styles.ruleValue}>Temperature {'>'} {rules.temperature_threshold}°C → Alert</Text>
-              </View>
+            {/* Light Control */}
+            <View style={[styles.controlTypeHeader, sleepModeActive && styles.controlTypeHeaderDisabled]}>
+              <Ionicons name="sunny" size={20} color={sleepModeActive ? '#9E9E9E' : '#fa709a'} />
+              <Text style={[styles.controlTypeTitle, sleepModeActive && styles.controlTypeTitleDisabled]}>Light Control (Priority 3)</Text>
+              <Switch
+                value={rules.light_control_enabled}
+                onValueChange={(value) => handleToggleControlType('light', value)}
+                disabled={rulesLoading || sleepModeActive}
+                trackColor={{ false: '#E4E9F2', true: sleepModeActive ? '#BDBDBD' : '#fa709a' }}
+                thumbColor="#FFFFFF"
+              />
             </View>
+            {rules.light_control_enabled && (
+              <>
+                <View style={[styles.ruleItem, sleepModeActive && styles.ruleItemDisabled]}>
+                  <View style={styles.ruleIconContainer}>
+                    <LinearGradient
+                      colors={sleepModeActive ? ['#E0E0E0', '#BDBDBD'] : ['#fa709a', '#fee140']}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 1 }}
+                      style={styles.ruleIconGradient}
+                    >
+                      <Ionicons name="sunny" size={20} color={sleepModeActive ? '#9E9E9E' : '#FFFFFF'} />
+                    </LinearGradient>
+                  </View>
+                  <View style={styles.ruleContent}>
+                    <Text style={[styles.ruleText, sleepModeActive && styles.ruleTextDisabled]}>High Brightness</Text>
+                    <Text style={[styles.ruleValue, sleepModeActive && styles.ruleValueDisabled]}>Light {'>'} {rules.light_close_threshold} lux → Close curtain</Text>
+                  </View>
+                </View>
+
+                <View style={[styles.ruleItem, sleepModeActive && styles.ruleItemDisabled]}>
+                  <View style={styles.ruleIconContainer}>
+                    <LinearGradient
+                      colors={sleepModeActive ? ['#E0E0E0', '#BDBDBD'] : ['#667eea', '#764ba2']}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 1 }}
+                      style={styles.ruleIconGradient}
+                    >
+                      <Ionicons name="moon" size={20} color={sleepModeActive ? '#9E9E9E' : '#FFFFFF'} />
+                    </LinearGradient>
+                  </View>
+                  <View style={styles.ruleContent}>
+                    <Text style={[styles.ruleText, sleepModeActive && styles.ruleTextDisabled]}>Low Brightness</Text>
+                    <Text style={[styles.ruleValue, sleepModeActive && styles.ruleValueDisabled]}>Light {'<'} {rules.light_open_threshold} lux → Open curtain</Text>
+                  </View>
+                </View>
+              </>
+            )}
           </>
         )}
       </View>
@@ -698,6 +1065,46 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#FFFFFF',
   },
+  sleepModeCard: {
+    marginHorizontal: 20,
+    marginBottom: 20,
+    borderRadius: 20,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 6,
+  },
+  sleepModeGradient: {
+    padding: 20,
+  },
+  sleepModeContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  sleepModeLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  sleepModeInfo: {
+    marginLeft: 16,
+    flex: 1,
+  },
+  sleepModeTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    marginBottom: 4,
+  },
+  sleepModeDescription: {
+    fontSize: 13,
+    color: 'rgba(255, 255, 255, 0.8)',
+    fontWeight: '500',
+  },
+
   positionCard: {
     backgroundColor: '#FFFFFF',
     marginHorizontal: 20,
@@ -837,6 +1244,89 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     lineHeight: 18,
   },
+  pirCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 16,
+    elevation: 4,
+  },
+  pirCardDisabled: {
+    backgroundColor: '#F5F5F5',
+    opacity: 0.7,
+  },
+  pirHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  pirIconContainer: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    overflow: 'hidden',
+    marginRight: 14,
+  },
+  pirIconGradient: {
+    width: '100%',
+    height: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  pirInfo: {
+    flex: 1,
+  },
+  pirTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#2E3A59',
+    marginBottom: 4,
+    letterSpacing: -0.3,
+  },
+  pirTitleDisabled: {
+    color: '#9E9E9E',
+  },
+  pirDescription: {
+    fontSize: 14,
+    color: '#8F9BB3',
+    fontWeight: '500',
+  },
+  pirDescriptionDisabled: {
+    color: '#BDBDBD',
+  },
+  pirToggleContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#F8F9FA',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderRadius: 16,
+    marginBottom: 14,
+  },
+  pirToggleInfo: {
+    flex: 1,
+  },
+  pirToggleLabel: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#2E3A59',
+    marginBottom: 4,
+  },
+  pirToggleLabelDisabled: {
+    color: '#9E9E9E',
+  },
+  pirToggleStatus: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#FFA726',
+  },
+  pirToggleStatusDisabled: {
+    color: '#BDBDBD',
+  },
   autoModeCard: {
     backgroundColor: '#FFFFFF',
     borderRadius: 20,
@@ -846,6 +1336,10 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.08,
     shadowRadius: 16,
     elevation: 4,
+  },
+  autoModeCardDisabled: {
+    backgroundColor: '#F5F5F5',
+    opacity: 0.7,
   },
   autoModeHeader: {
     flexDirection: 'row',
@@ -875,10 +1369,16 @@ const styles = StyleSheet.create({
     marginBottom: 4,
     letterSpacing: -0.3,
   },
+  autoModeTitleDisabled: {
+    color: '#9E9E9E',
+  },
   autoModeDescription: {
     fontSize: 14,
     color: '#8F9BB3',
     fontWeight: '500',
+  },
+  autoModeDescriptionDisabled: {
+    color: '#BDBDBD',
   },
   modeStatusIndicatorCard: {
     flexDirection: 'row',
@@ -897,6 +1397,7 @@ const styles = StyleSheet.create({
   },
   autoModeButtons: {
     gap: 12,
+    marginBottom: 14,
   },
   autoModeButton: {
     borderRadius: 16,
@@ -909,6 +1410,9 @@ const styles = StyleSheet.create({
     shadowRadius: 16,
     elevation: 8,
     transform: [{ scale: 1.02 }],
+  },
+  autoModeButtonDisabled: {
+    opacity: 0.5,
   },
   autoModeButtonGradient: {
     flexDirection: 'row',
@@ -946,6 +1450,9 @@ const styles = StyleSheet.create({
     shadowRadius: 16,
     elevation: 4,
   },
+  rulesCardDisabled: {
+    backgroundColor: '#F5F5F5',
+  },
   rulesHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -959,6 +1466,9 @@ const styles = StyleSheet.create({
     letterSpacing: -0.3,
     marginLeft: 12,
     flex: 1,
+  },
+  rulesTitleDisabled: {
+    color: '#9E9E9E',
   },
   rulesActionButtons: {
     flexDirection: 'row',
@@ -1011,6 +1521,9 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#F1F3F5',
   },
+  ruleItemDisabled: {
+    opacity: 0.5,
+  },
   ruleItemEditable: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -1044,6 +1557,9 @@ const styles = StyleSheet.create({
     color: '#2E3A59',
     marginBottom: 3,
   },
+  ruleTextDisabled: {
+    color: '#9E9E9E',
+  },
   ruleDescription: {
     fontSize: 12,
     color: '#8F9BB3',
@@ -1055,6 +1571,9 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#8F9BB3',
     fontWeight: '500',
+  },
+  ruleValueDisabled: {
+    color: '#BDBDBD',
   },
   inputContainer: {
     flexDirection: 'row',
@@ -1078,5 +1597,40 @@ const styles = StyleSheet.create({
     color: '#8F9BB3',
     fontWeight: '600',
     marginLeft: 8,
+  },
+  controlTypeHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    backgroundColor: '#F8F9FA',
+    borderRadius: 12,
+    marginTop: 16,
+    marginBottom: 8,
+    gap: 10,
+  },
+  controlTypeTitle: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#2E3A59',
+    letterSpacing: 0.2,
+  },
+  controlTypeHeaderDisabled: {
+    backgroundColor: '#F0F0F0',
+  },
+  controlTypeTitleDisabled: {
+    color: '#9E9E9E',
+  },
+  statusBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  statusBadgeText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    letterSpacing: 0.5,
   },
 });

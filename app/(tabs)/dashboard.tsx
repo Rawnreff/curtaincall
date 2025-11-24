@@ -1,8 +1,10 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, RefreshControl, Animated, TouchableOpacity, Alert } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import { useSensor } from '../contexts/SensorContext';
 import { useControl } from '../contexts/ControlContext';
+import { getSleepModeStatus, deactivateSleepMode } from '../services/pirSleepService';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
@@ -15,6 +17,7 @@ export default function DashboardScreen() {
   const fadeAnim = new Animated.Value(1);
   const [quickCloseLoading, setQuickCloseLoading] = useState(false);
   const [quickOpenLoading, setQuickOpenLoading] = useState(false);
+  const [sleepModeActive, setSleepModeActive] = useState(false);
 
   useEffect(() => {
     // Set initial fade animation only once on mount
@@ -25,7 +28,29 @@ export default function DashboardScreen() {
     }).start();
   }, []);
 
+  // Load sleep mode status when screen comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      loadSleepModeStatus();
+    }, [])
+  );
+
+  const loadSleepModeStatus = async () => {
+    try {
+      const status = await getSleepModeStatus();
+      setSleepModeActive(status.active);
+      console.log('📊 Dashboard: Sleep mode status loaded:', status.active);
+    } catch (error) {
+      console.error('Error loading sleep mode status:', error);
+    }
+  };
+
   const handleQuickClose = async () => {
+    if (sleepModeActive) {
+      Alert.alert('Sleep Mode Active', 'Cannot control curtain while sleep mode is active');
+      return;
+    }
+
     if (sensorData?.posisi === 'Tertutup') {
       Alert.alert('Info', 'Curtain is already closed');
       return;
@@ -53,6 +78,34 @@ export default function DashboardScreen() {
       );
     } finally {
       setQuickCloseLoading(false);
+    }
+  };
+
+  const handleDeactivateSleepMode = async () => {
+    setQuickOpenLoading(true);
+    try {
+      const response = await deactivateSleepMode();
+      setSleepModeActive(false);
+      
+      // Refresh data after deactivating sleep mode
+      setTimeout(() => {
+        refreshData();
+        loadSleepModeStatus();
+      }, 1000);
+      
+      Alert.alert(
+        '✅ Sleep Mode Deactivated',
+        response.message || 'Sleep mode has been turned off',
+        [{ text: 'OK', style: 'default' }]
+      );
+    } catch (error: any) {
+      Alert.alert(
+        '❌ Error',
+        error.response?.data?.message || 'Failed to deactivate sleep mode',
+        [{ text: 'OK', style: 'cancel' }]
+      );
+    } finally {
+      setQuickOpenLoading(false);
     }
   };
 
@@ -125,6 +178,11 @@ export default function DashboardScreen() {
     return 'Good Evening';
   };
 
+  const handleRefresh = () => {
+    refreshData();
+    loadSleepModeStatus();
+  };
+
   return (
     <ScrollView 
       style={styles.container}
@@ -132,7 +190,7 @@ export default function DashboardScreen() {
       refreshControl={
         <RefreshControl 
           refreshing={loading} 
-          onRefresh={refreshData}
+          onRefresh={handleRefresh}
           tintColor="#667eea"
           colors={['#667eea']}
         />
@@ -162,13 +220,19 @@ export default function DashboardScreen() {
               {sensorData?.posisi || 'Loading...'}
             </Text>
           </View>
-          <View style={styles.statusBadge}>
+          <View style={[
+            styles.statusBadge,
+            sleepModeActive && { backgroundColor: '#ede9fe' }
+          ]}>
             <View style={[
               styles.statusDot,
-              { backgroundColor: sensorData?.posisi === 'Terbuka' ? '#4CAF50' : '#FF9800' }
+              { backgroundColor: sleepModeActive ? '#6366f1' : sensorData?.posisi === 'Terbuka' ? '#4CAF50' : '#FF9800' }
             ]} />
-            <Text style={styles.statusBadgeText}>
-              {sensorData?.status_tirai || 'Unknown'}
+            <Text style={[
+              styles.statusBadgeText,
+              sleepModeActive && { color: '#6366f1' }
+            ]}>
+              {sleepModeActive ? 'Sleep Mode' : sensorData?.status_tirai || 'Unknown'}
             </Text>
           </View>
         </View>
@@ -197,41 +261,85 @@ export default function DashboardScreen() {
         <View style={styles.quickActions}>
           {sensorData?.posisi === 'Terbuka' ? (
             <TouchableOpacity 
-              style={[styles.quickActionButtonClose, quickCloseLoading && styles.quickActionButtonDisabled]}
+              style={styles.quickActionButtonClose}
               onPress={handleQuickClose}
-              disabled={quickCloseLoading}
+              disabled={quickCloseLoading || sleepModeActive}
               activeOpacity={0.8}
             >
-              {quickCloseLoading ? (
-                <>
-                  <Ionicons name="hourglass" size={18} color="#FFFFFF" />
-                  <Text style={styles.quickActionText}>Closing...</Text>
-                </>
-              ) : (
-                <>
-                  <Ionicons name="close-circle" size={18} color="#FFFFFF" />
-                  <Text style={styles.quickActionText}>Quick Close</Text>
-                </>
-              )}
+              <LinearGradient
+                colors={
+                  (quickCloseLoading || sleepModeActive)
+                    ? ['#E0E0E0', '#BDBDBD']  // Gray when disabled
+                    : ['#FF9800', '#F57C00']  // Orange when enabled
+                }
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.quickActionButtonGradient}
+              >
+                {quickCloseLoading ? (
+                  <>
+                    <Ionicons name="hourglass" size={18} color="#FFFFFF" />
+                    <Text style={styles.quickActionText}>Closing...</Text>
+                  </>
+                ) : (
+                  <>
+                    <Ionicons name="close-circle" size={18} color="#FFFFFF" />
+                    <Text style={styles.quickActionText}>Quick Close</Text>
+                  </>
+                )}
+              </LinearGradient>
+            </TouchableOpacity>
+          ) : sleepModeActive ? (
+            <TouchableOpacity 
+              style={styles.quickActionButtonOpen}
+              onPress={handleDeactivateSleepMode}
+              disabled={quickOpenLoading}
+              activeOpacity={0.8}
+            >
+              <LinearGradient
+                colors={['#6366f1', '#4f46e5']}  // Purple for sleep mode deactivate
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.quickActionButtonGradient}
+              >
+                {quickOpenLoading ? (
+                  <>
+                    <Ionicons name="hourglass" size={18} color="#FFFFFF" />
+                    <Text style={styles.quickActionText}>Turning Off...</Text>
+                  </>
+                ) : (
+                  <>
+                    <Ionicons name="moon-outline" size={18} color="#FFFFFF" />
+                    <Text style={styles.quickActionText}>Wake Up</Text>
+                  </>
+                )}
+              </LinearGradient>
             </TouchableOpacity>
           ) : (
             <TouchableOpacity 
-              style={[styles.quickActionButtonOpen, quickOpenLoading && styles.quickActionButtonDisabled]}
+              style={styles.quickActionButtonOpen}
               onPress={handleQuickOpen}
               disabled={quickOpenLoading}
               activeOpacity={0.8}
             >
-              {quickOpenLoading ? (
-                <>
-                  <Ionicons name="hourglass" size={18} color="#FFFFFF" />
-                  <Text style={styles.quickActionText}>Opening...</Text>
-                </>
-              ) : (
-                <>
-                  <Ionicons name="arrow-up-circle" size={18} color="#FFFFFF" />
-                  <Text style={styles.quickActionText}>Quick Open</Text>
-                </>
-              )}
+              <LinearGradient
+                colors={['#10b981', '#059669']}  // Green when enabled
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.quickActionButtonGradient}
+              >
+                {quickOpenLoading ? (
+                  <>
+                    <Ionicons name="hourglass" size={18} color="#FFFFFF" />
+                    <Text style={styles.quickActionText}>Opening...</Text>
+                  </>
+                ) : (
+                  <>
+                    <Ionicons name="arrow-up-circle" size={18} color="#FFFFFF" />
+                    <Text style={styles.quickActionText}>Quick Open</Text>
+                  </>
+                )}
+              </LinearGradient>
             </TouchableOpacity>
           )}
           <TouchableOpacity 
@@ -253,7 +361,6 @@ export default function DashboardScreen() {
           unit="°C"
           icon="🌡️"
           colors={['#667eea', '#764ba2']}
-          trend={sensorData?.suhu ? '+2°' : null}
         />
         <StatusCard
           title="Humidity"
@@ -261,7 +368,6 @@ export default function DashboardScreen() {
           unit="%"
           icon="💧"
           colors={['#f093fb', '#f5576c']}
-          trend={sensorData?.kelembapan ? '-3%' : null}
         />
         <StatusCard
           title="Light"
@@ -269,13 +375,12 @@ export default function DashboardScreen() {
           unit="lux"
           icon="💡"
           colors={['#4facfe', '#00f2fe']}
-          trend={sensorData?.cahaya ? '+50' : null}
         />
         <StatusCard
           title="Mode"
-          value={sensorData?.status_tirai || '--'}
-          icon="🎛️"
-          colors={['#10b981', '#059669']}
+          value={sleepModeActive ? 'Sleep' : sensorData?.status_tirai || '--'}
+          icon={sleepModeActive ? '🌙' : '🎛️'}
+          colors={sleepModeActive ? ['#6366f1', '#4f46e5'] : ['#10b981', '#059669']}
         />
       </View>
 
@@ -295,17 +400,27 @@ export default function DashboardScreen() {
         >
           <View style={styles.activityIcon}>
             <LinearGradient
-              colors={['#667eea', '#764ba2']}
+              colors={
+                sleepModeActive 
+                  ? ['#6366f1', '#4f46e5']  // Purple for sleep mode
+                  : ['#667eea', '#764ba2']  // Default gradient
+              }
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
               style={styles.activityIconGradient}
             >
-              <Text style={styles.activityEmoji}>🌅</Text>
+              <Text style={styles.activityEmoji}>
+                {sleepModeActive ? '🌙' : '🌅'}
+              </Text>
             </LinearGradient>
           </View>
           <View style={styles.activityContent}>
             <Text style={styles.activityTitle}>
-              {sensorData?.status_tirai === 'Auto' ? 'Auto mode active' : 'Manual mode active'}
+              {sleepModeActive 
+                ? 'Sleep mode active' 
+                : sensorData?.status_tirai === 'Auto' 
+                ? 'Auto mode active' 
+                : 'Manual mode active'}
             </Text>
             <Text style={styles.activityTime}>
               {sensorData?.timestamp ? new Date(sensorData.timestamp).toLocaleString() : 'Just now'}
@@ -468,13 +583,8 @@ const styles = StyleSheet.create({
   },
   quickActionButtonClose: {
     flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#FF9800',
-    padding: 14,
     borderRadius: 16,
-    gap: 8,
+    overflow: 'hidden',
     shadowColor: '#FF9800',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
@@ -483,21 +593,20 @@ const styles = StyleSheet.create({
   },
   quickActionButtonOpen: {
     flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#10b981',
-    padding: 14,
     borderRadius: 16,
-    gap: 8,
+    overflow: 'hidden',
     shadowColor: '#10b981',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
     elevation: 4,
   },
-  quickActionButtonDisabled: {
-    opacity: 0.6,
+  quickActionButtonGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 14,
+    gap: 8,
   },
   quickActionButtonSecondary: {
     flex: 1,

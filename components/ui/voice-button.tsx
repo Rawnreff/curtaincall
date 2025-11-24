@@ -50,6 +50,8 @@ type Props = {
 export default function VoiceButton({ onPress, accessibilityLabel = 'Voice Command', style }: Props) {
   const wave1 = useRef(new Animated.Value(0)).current;
   const pulseAnim = useRef(new Animated.Value(1)).current;
+  const rotateAnim = useRef(new Animated.Value(0)).current;
+  const glowAnim = useRef(new Animated.Value(0)).current;
   const [showModal, setShowModal] = useState(false);
   const [inputText, setInputText] = useState('');
   const [loading, setLoading] = useState(false);
@@ -120,6 +122,46 @@ export default function VoiceButton({ onPress, accessibilityLabel = 'Voice Comma
       pulseAnim.setValue(1);
     }
   }, [isRecording, pulseAnim]);
+
+  // Rotation animation for processing state
+  useEffect(() => {
+    if (loading) {
+      Animated.loop(
+        Animated.timing(rotateAnim, {
+          toValue: 1,
+          duration: 2000,
+          easing: Easing.linear,
+          useNativeDriver: true,
+        })
+      ).start();
+    } else {
+      rotateAnim.setValue(0);
+    }
+  }, [loading, rotateAnim]);
+
+  // Glow animation for processing state
+  useEffect(() => {
+    if (loading) {
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(glowAnim, {
+            toValue: 1,
+            duration: 1000,
+            easing: Easing.inOut(Easing.ease),
+            useNativeDriver: true,
+          }),
+          Animated.timing(glowAnim, {
+            toValue: 0,
+            duration: 1000,
+            easing: Easing.inOut(Easing.ease),
+            useNativeDriver: true,
+          }),
+        ])
+      ).start();
+    } else {
+      glowAnim.setValue(0);
+    }
+  }, [loading, glowAnim]);
 
   // Speech-to-text handlers using react-native-voice (only if available)
   useEffect(() => {
@@ -390,13 +432,14 @@ export default function VoiceButton({ onPress, accessibilityLabel = 'Voice Comma
   };
 
   const stopRecording = async () => {
+    setIsRecording(false);
+    setLoading(true);
     setStatusText('Processing...');
     
     if (Platform.OS === 'web') {
       if (recognitionRef.current) {
         try { recognitionRef.current.stop(); } catch (e) { /* ignore */ }
         recognitionRef.current = null;
-        setIsRecording(false);
         return;
       }
       if (mediaRecorderRef.current) {
@@ -405,10 +448,8 @@ export default function VoiceButton({ onPress, accessibilityLabel = 'Voice Comma
           if (mr && mr.state !== 'inactive') mr.stop();
         } catch (e) { console.warn('MediaRecorder stop error', e); }
         mediaRecorderRef.current = null;
-        setIsRecording(false);
         return;
       }
-      setIsRecording(false);
       return;
     }
 
@@ -417,8 +458,6 @@ export default function VoiceButton({ onPress, accessibilityLabel = 'Voice Comma
         await Voice.stop();
       } catch (err: any) {
         console.warn('Voice stop error', err);
-      } finally {
-        setIsRecording(false);
       }
       return;
     }
@@ -436,13 +475,10 @@ export default function VoiceButton({ onPress, accessibilityLabel = 'Voice Comma
       } catch (e: any) {
         console.warn('expo-av stop error', e);
         Alert.alert('Recording error', e?.message || String(e));
-      } finally {
-        setIsRecording(false);
+        setLoading(false);
       }
       return;
     }
-
-    setIsRecording(false);
   };
 
   const waveStyle = (animatedValue: Animated.Value) => ({
@@ -491,7 +527,7 @@ export default function VoiceButton({ onPress, accessibilityLabel = 'Voice Comma
         <View style={styles.modalOverlay}>
           <View style={styles.modalCard}>
             {/* Large mic button in center */}
-            <Animated.View style={[styles.micButtonContainer, isRecording && { transform: [{ scale: pulseAnim }] }]}>
+            <Animated.View style={[styles.micButtonContainer, isRecording && !loading && { transform: [{ scale: pulseAnim }] }]}>
               <TouchableOpacity
                 onPress={handleMicPress}
                 disabled={loading && !isRecording}
@@ -513,9 +549,44 @@ export default function VoiceButton({ onPress, accessibilityLabel = 'Voice Comma
                     </LinearGradient>
                   </View>
                 ) : loading ? (
-                  // Loading state
-                  <View style={styles.largeMicButton}>
-                    <ActivityIndicator size="large" color="#667eea" />
+                  // Processing state - animated gradient with processing icon
+                  <View style={styles.processingContainer}>
+                    <Animated.View 
+                      style={[
+                        styles.processingGlow,
+                        {
+                          opacity: glowAnim.interpolate({
+                            inputRange: [0, 1],
+                            outputRange: [0.2, 0.6],
+                          }),
+                          transform: [{
+                            scale: glowAnim.interpolate({
+                              inputRange: [0, 1],
+                              outputRange: [1.2, 1.4],
+                            }),
+                          }],
+                        },
+                      ]} 
+                    />
+                    <LinearGradient
+                      colors={['#f59e0b', '#f97316']}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 1 }}
+                      style={styles.largeMicButtonProcessing}
+                    >
+                      <Animated.View
+                        style={{
+                          transform: [{
+                            rotate: rotateAnim.interpolate({
+                              inputRange: [0, 1],
+                              outputRange: ['0deg', '360deg'],
+                            }),
+                          }],
+                        }}
+                      >
+                        <Ionicons name="cog" size={48} color="#fff" />
+                      </Animated.View>
+                    </LinearGradient>
                   </View>
                 ) : (
                   // Idle state - soft gradient background with border
@@ -534,7 +605,12 @@ export default function VoiceButton({ onPress, accessibilityLabel = 'Voice Comma
             </Animated.View>
 
             {/* Status text */}
-            <Text style={styles.statusText}>{statusText}</Text>
+            <Text style={[
+              styles.statusText,
+              loading && styles.statusTextProcessing
+            ]}>
+              {statusText}
+            </Text>
 
             {/* Command result (if successful) */}
             {commandResult && (
@@ -712,12 +788,42 @@ const styles = StyleSheet.create({
     shadowRadius: 24,
     elevation: 12,
   },
+  processingContainer: {
+    position: 'relative',
+    width: 120,
+    height: 120,
+  },
+  processingGlow: {
+    position: 'absolute',
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: '#f59e0b',
+    opacity: 0.4,
+    transform: [{ scale: 1.3 }],
+  },
+  largeMicButtonProcessing: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#f59e0b',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.6,
+    shadowRadius: 24,
+    elevation: 12,
+  },
   statusText: {
     fontSize: 16,
     fontWeight: '600',
     color: '#374151',
     textAlign: 'center',
     marginBottom: 8,
+  },
+  statusTextProcessing: {
+    color: '#f59e0b',
+    fontWeight: '700',
   },
   resultContainer: {
     flexDirection: 'row',
