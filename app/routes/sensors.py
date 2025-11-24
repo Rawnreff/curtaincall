@@ -2,7 +2,19 @@ from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required
 from app.models.sensor_model import get_current_sensor_data, get_sensor_history, save_sensor_data
 from app import get_db
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+
+# Indonesia timezone (WIB = UTC+7)
+WIB = timezone(timedelta(hours=7))
+
+def make_aware(dt):
+    """Convert naive datetime to timezone-aware datetime (WIB)"""
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        # Naive datetime, assume it's UTC and convert to WIB
+        return dt.replace(tzinfo=timezone.utc).astimezone(WIB)
+    return dt
 
 sensors_bp = Blueprint('sensors', __name__)
 
@@ -26,8 +38,14 @@ def get_sensor_data():
         
         # Remove MongoDB _id and convert to JSON serializable
         data.pop('_id', None)
-        if 'timestamp' in data:
-            data['timestamp'] = data['timestamp'].isoformat()
+        if 'timestamp' in data and data['timestamp']:
+            # MongoDB stores as UTC, convert to WIB for display
+            if data['timestamp'].tzinfo is None:
+                # Naive datetime from MongoDB, treat as UTC
+                data['timestamp'] = data['timestamp'].replace(tzinfo=timezone.utc).astimezone(WIB).isoformat()
+            else:
+                # Already timezone-aware, convert to WIB
+                data['timestamp'] = data['timestamp'].astimezone(WIB).isoformat()
         
         return jsonify(data), 200
         
@@ -80,10 +98,18 @@ def get_sensor_history_endpoint():
         # Convert to JSON serializable format
         for item in history_data:
             item['_id'] = str(item['_id'])
-            if 'timestamp' in item:
-                item['timestamp'] = item['timestamp'].isoformat()
-            if 'history_timestamp' in item:
-                item['history_timestamp'] = item['history_timestamp'].isoformat()
+            if 'timestamp' in item and item['timestamp']:
+                # MongoDB stores as UTC, convert to WIB for display
+                if item['timestamp'].tzinfo is None:
+                    item['timestamp'] = item['timestamp'].replace(tzinfo=timezone.utc).astimezone(WIB).isoformat()
+                else:
+                    item['timestamp'] = item['timestamp'].astimezone(WIB).isoformat()
+            if 'history_timestamp' in item and item['history_timestamp']:
+                # MongoDB stores as UTC, convert to WIB for display
+                if item['history_timestamp'].tzinfo is None:
+                    item['history_timestamp'] = item['history_timestamp'].replace(tzinfo=timezone.utc).astimezone(WIB).isoformat()
+                else:
+                    item['history_timestamp'] = item['history_timestamp'].astimezone(WIB).isoformat()
         
         return jsonify(history_data), 200
         
@@ -99,10 +125,13 @@ def get_sensor_stats():
         sensor_data_collection = db.get_collection('curtain_data')
         
         # Get data from last 24 hours for stats
-        time_threshold = datetime.utcnow() - timedelta(hours=24)
+        time_threshold = datetime.now(WIB) - timedelta(hours=24)
+        
+        # Query with UTC time for compatibility with old data
+        time_threshold_utc = time_threshold.astimezone(timezone.utc).replace(tzinfo=None)
         
         history_data = list(sensor_data_collection.find({
-            'timestamp': {'$gte': time_threshold}
+            'timestamp': {'$gte': time_threshold_utc}
         }))
         
         if not history_data:

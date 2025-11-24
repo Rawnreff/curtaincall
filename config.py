@@ -23,10 +23,16 @@ class Config:
     MQTT_KEEPALIVE = NetworkConfig.MQTT_KEEPALIVE
     MQTT_TLS_ENABLED = NetworkConfig.MQTT_TLS_ENABLED
     
+    # Auto Mode Control Flags
+    TEMPERATURE_CONTROL_ENABLED = True
+    HUMIDITY_CONTROL_ENABLED = True
+    LIGHT_CONTROL_ENABLED = True
+    
     # Sensor Thresholds
-    TEMPERATURE_THRESHOLD = 35.0  # °C
-    LIGHT_OPEN_THRESHOLD = 250   # lux
-    LIGHT_CLOSE_THRESHOLD = 500  # lux
+    TEMPERATURE_HIGH_THRESHOLD = 35.0  # °C
+    HUMIDITY_HIGH_THRESHOLD = 80.0     # %
+    LIGHT_OPEN_THRESHOLD = 250         # lux
+    LIGHT_CLOSE_THRESHOLD = 500        # lux
     
     # API Settings
     API_PREFIX = '/api'

@@ -1,5 +1,8 @@
 from app import get_db, bcrypt
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
+
+# Indonesia timezone (WIB = UTC+7)
+WIB = timezone(timedelta(hours=7))
 
 def get_collection(collection_name):
     db = get_db()
@@ -23,8 +26,8 @@ class User:
             'name': name,
             'email': email,
             'password': hashed_password,
-            'created_at': datetime.utcnow(),
-            'updated_at': datetime.utcnow(),
+            'created_at': datetime.now(WIB),
+            'updated_at': datetime.now(WIB),
             'is_active': True
         }
         

@@ -3,8 +3,11 @@ from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identi
 from app.models.user_model import User
 from app import get_db
 from bson import ObjectId
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 import re
+
+# Indonesia timezone (WIB = UTC+7)
+WIB = timezone(timedelta(hours=7))
 
 users_bp = Blueprint('users', __name__)
 
@@ -141,7 +144,7 @@ def update_profile():
         
         if update_data:
             users_collection = get_db().get_collection('users')
-            update_data['updated_at'] = datetime.utcnow()
+            update_data['updated_at'] = datetime.now(WIB)
             users_collection.update_one(
                 {'_id': ObjectId(user_id)},
                 {'$set': update_data}

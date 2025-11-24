@@ -5,6 +5,10 @@ from flask_bcrypt import Bcrypt
 from pymongo import MongoClient
 import paho.mqtt.client as mqtt
 from config import Config
+from datetime import datetime, timedelta, timezone
+
+# Indonesia timezone (WIB = UTC+7)
+WIB = timezone(timedelta(hours=7))
 
 # Global instances
 mongo_client = None
@@ -102,8 +106,18 @@ def setup_mqtt(app):
             print("✅ MQTT Connected successfully")
             client.subscribe("/curtain/data")
             client.subscribe("/curtain/rules/request")
+            client.subscribe("/curtain/auto_action")
+            client.subscribe("/curtain/pir_action")
+            client.subscribe("/curtain/status/request")
+            client.subscribe("/curtain/pir/settings/request")
+            client.subscribe("/curtain/sleep_mode/request")
             print("📬 Subscribed to /curtain/data")
             print("📬 Subscribed to /curtain/rules/request")
+            print("📬 Subscribed to /curtain/auto_action")
+            print("📬 Subscribed to /curtain/pir_action")
+            print("📬 Subscribed to /curtain/status/request")
+            print("📬 Subscribed to /curtain/pir/settings/request")
+            print("📬 Subscribed to /curtain/sleep_mode/request")
         else:
             print(f"❌ MQTT Connection failed with code {rc}")
     
@@ -133,6 +147,21 @@ def handle_mqtt_message(topic, message):
         elif topic == "/curtain/rules/request":
             # ESP32 requesting auto mode rules
             handle_rules_request(message)
+        elif topic == "/curtain/auto_action":
+            # ESP32 reporting auto mode action
+            handle_auto_action_message(message)
+        elif topic == "/curtain/pir_action":
+            # ESP32 reporting PIR motion detection action
+            handle_pir_action_message(mqtt_client, None, message)
+        elif topic == "/curtain/status/request":
+            # ESP32 requesting current status
+            handle_status_request(message)
+        elif topic == "/curtain/pir/settings/request":
+            # ESP32 requesting PIR settings
+            handle_pir_settings_request(message)
+        elif topic == "/curtain/sleep_mode/request":
+            # ESP32 requesting sleep mode status
+            handle_sleep_mode_request(message)
     except Exception as e:
         print(f"❌ Error handling MQTT message: {e}")
 
@@ -146,27 +175,36 @@ def handle_rules_request(message):
         db = get_db()
         rules_collection = db.get_collection('auto_mode_rules')
         
-        # Get the most recent rules (could be user-specific or default)
-        rules = rules_collection.find_one(sort=[('updated_at', -1)])
+        # Get global rules (shared by all users)
+        rules = rules_collection.find_one({'_id': 'global'})
         
         if not rules:
             # Use default rules
             rules = {
                 'light_open_threshold': 250,
                 'light_close_threshold': 500,
-                'temperature_threshold': 35.0,
+                'temperature_high_threshold': 35.0,
+                'humidity_high_threshold': 80.0,
                 'enabled': True
             }
         
-        # Prepare MQTT message
+        # Prepare MQTT message with all fields
         mqtt_message = {
             'rules': {
+                # Control flags
+                'temperature_control_enabled': rules.get('temperature_control_enabled', True),
+                'humidity_control_enabled': rules.get('humidity_control_enabled', True),
+                'light_control_enabled': rules.get('light_control_enabled', True),
+                'pir_enabled': rules.get('pir_enabled', True),
+                # Thresholds
+                'temperature_high_threshold': rules.get('temperature_high_threshold', 35.0),
+                'humidity_high_threshold': rules.get('humidity_high_threshold', 80.0),
                 'light_open_threshold': rules.get('light_open_threshold', 250),
                 'light_close_threshold': rules.get('light_close_threshold', 500),
-                'temperature_threshold': rules.get('temperature_threshold', 35.0),
+                # Master switch
                 'enabled': rules.get('enabled', True)
             },
-            'timestamp': datetime.utcnow().isoformat()
+            'timestamp': datetime.now(WIB).isoformat()
         }
         
         # Publish rules to ESP32
@@ -181,6 +219,197 @@ def handle_rules_request(message):
         import traceback
         traceback.print_exc()
 
+def handle_auto_action_message(message):
+    """Handle auto mode action message from ESP32"""
+    try:
+        import json
+        from app.models.sensor_model import create_notification
+        
+        # Parse the message
+        data = json.loads(message)
+        
+        action = data.get('action', 'unknown')
+        reason = data.get('reason', 'light')  # temperature, humidity, or light
+        temperature = data.get('temperature', 0)
+        humidity = data.get('humidity', 0)
+        light_level = data.get('light_level', 0)
+        threshold = data.get('threshold', 0)
+        
+        # Determine action description
+        action_text = "opening" if action == "open" else "closing"
+        
+        # Create notification message based on reason
+        if reason == 'temperature':
+            notification_message = (
+                f"Curtain {action_text} automatically due to high temperature "
+                f"({temperature}°C above threshold of {threshold}°C)"
+            )
+            title = 'Auto Mode Action (Temperature)'
+        elif reason == 'humidity':
+            notification_message = (
+                f"Curtain {action_text} automatically due to high humidity "
+                f"({humidity}% above threshold of {threshold}%)"
+            )
+            title = 'Auto Mode Action (Humidity)'
+        else:  # light
+            comparison = "below" if action == "open" else "above"
+            notification_message = (
+                f"Curtain {action_text} automatically due to light level "
+                f"({light_level} lux {comparison} threshold of {threshold} lux)"
+            )
+            title = 'Auto Mode Action (Light)'
+        
+        # Create notification
+        create_notification(
+            type='auto_mode',
+            title=title,
+            message=notification_message,
+            priority='low'
+        )
+        
+        print(f"✅ Auto mode notification created: {action} (reason={reason}, temp={temperature}, humidity={humidity}, light={light_level})")
+        
+    except json.JSONDecodeError as e:
+        print(f"❌ Invalid JSON in auto action message: {e}")
+    except Exception as e:
+        print(f"❌ Error handling auto action message: {e}")
+        import traceback
+        traceback.print_exc()
+
+def handle_pir_action_message(client, userdata, message):
+    """Handle PIR motion detection action messages from ESP32"""
+    try:
+        import json
+        from app.models.sensor_model import create_notification
+        
+        # Handle both string and bytes message
+        if isinstance(message, str):
+            data = json.loads(message)
+        else:
+            data = json.loads(message.payload.decode())
+        
+        action = data.get('action', '')
+        temperature = data.get('temperature', 0)
+        humidity = data.get('humidity', 0)
+        light_level = data.get('light_level', 0)
+        
+        print(f"👁️ PIR Action received: {action} (temp={temperature}, humidity={humidity}, light={light_level})")
+        
+        # Create notification message
+        action_text = "opening" if action == "open" else "closing"
+        notification_message = (
+            f"Curtain {action_text} automatically due to motion detection. "
+            f"Current conditions: {temperature}°C, {humidity}%, {light_level} lux"
+        )
+        
+        # Create notification
+        create_notification(
+            type='pir_motion',
+            title='Motion Detected',
+            message=notification_message,
+            priority='medium'
+        )
+        
+        print(f"✅ PIR notification created: {action}")
+        
+    except json.JSONDecodeError as e:
+        print(f"❌ Invalid JSON in PIR action message: {e}")
+    except Exception as e:
+        print(f"❌ Error handling PIR action message: {e}")
+        import traceback
+        traceback.print_exc()
+
+def handle_status_request(message):
+    """Handle status request from ESP32 - send current position from database"""
+    try:
+        import json
+        from app.models.sensor_model import get_latest_sensor_data
+        
+        print("📤 ESP32 requesting current status")
+        
+        # Get latest sensor data from database
+        latest_data = get_latest_sensor_data()
+        
+        if latest_data:
+            # Send current status to ESP32
+            status_response = {
+                "posisi": latest_data.get('posisi', 'Tertutup'),
+                "status_tirai": latest_data.get('status_tirai', 'Manual'),
+                "timestamp": datetime.now(WIB).isoformat()
+            }
+            
+            response_message = json.dumps(status_response)
+            mqtt_client.publish("/curtain/status/response", response_message, qos=1)
+            print(f"✅ Status response sent: {status_response}")
+        else:
+            # No data in database, send default
+            status_response = {
+                "posisi": "Tertutup",
+                "status_tirai": "Manual",
+                "timestamp": datetime.now(WIB).isoformat()
+            }
+            response_message = json.dumps(status_response)
+            mqtt_client.publish("/curtain/status/response", response_message, qos=1)
+            print(f"⚠️ No sensor data found, sent default: {status_response}")
+        
+    except Exception as e:
+        print(f"❌ Error handling status request: {e}")
+        import traceback
+        traceback.print_exc()
+
+def handle_pir_settings_request(message):
+    """Handle PIR settings request from ESP32"""
+    try:
+        import json
+        from app.models.pir_settings_model import get_pir_settings, publish_pir_settings_to_esp32
+        
+        print("📤 ESP32 requesting PIR settings")
+        
+        # Get PIR settings from database
+        settings = get_pir_settings()
+        
+        # Publish to ESP32
+        publish_pir_settings_to_esp32(settings)
+        
+    except Exception as e:
+        print(f"❌ Error handling PIR settings request: {e}")
+        import traceback
+        traceback.print_exc()
+
+def handle_sleep_mode_request(message):
+    """Handle sleep mode status request from ESP32"""
+    try:
+        import json
+        from app.models.sleep_mode_model import get_sleep_mode_status, publish_sleep_mode_to_esp32
+        from app.models.pir_settings_model import get_pir_settings
+        from app.models.sensor_model import get_auto_mode_rules
+        
+        print("📤 ESP32 requesting sleep mode status")
+        
+        # Get sleep mode status
+        status = get_sleep_mode_status()
+        
+        if status.get('active'):
+            # Sleep mode is active, send with disabled settings
+            publish_sleep_mode_to_esp32(True, {
+                'pir_enabled': False,
+                'auto_mode_enabled': False
+            })
+        else:
+            # Sleep mode is inactive, send current settings
+            pir_settings = get_pir_settings()
+            auto_mode_rules = get_auto_mode_rules()
+            
+            publish_sleep_mode_to_esp32(False, {
+                'pir_enabled': pir_settings.get('enabled', True),
+                'auto_mode_enabled': auto_mode_rules.get('enabled', False)
+            })
+        
+    except Exception as e:
+        print(f"❌ Error handling sleep mode request: {e}")
+        import traceback
+        traceback.print_exc()
+
 def register_blueprints(app):
     """Register all blueprints"""
     from app.routes.sensors import sensors_bp
@@ -188,12 +417,16 @@ def register_blueprints(app):
     from app.routes.users import users_bp
     from app.routes.notifications import notifications_bp
     from app.routes.auto_mode_rules import auto_mode_rules_bp
+    from app.routes.pir_settings import pir_settings_bp
+    from app.routes.sleep_mode import sleep_mode_bp
     
     app.register_blueprint(sensors_bp, url_prefix=f"{app.config['API_PREFIX']}/sensors")
     app.register_blueprint(control_bp, url_prefix=f"{app.config['API_PREFIX']}/control")
     app.register_blueprint(users_bp, url_prefix=f"{app.config['API_PREFIX']}/users")
     app.register_blueprint(notifications_bp, url_prefix=f"{app.config['API_PREFIX']}/notifications")
     app.register_blueprint(auto_mode_rules_bp, url_prefix=f"{app.config['API_PREFIX']}/auto-mode")
+    app.register_blueprint(pir_settings_bp, url_prefix=f"{app.config['API_PREFIX']}/pir")
+    app.register_blueprint(sleep_mode_bp, url_prefix=f"{app.config['API_PREFIX']}/sleep-mode")
 
 def get_db():
     return db

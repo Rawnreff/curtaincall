@@ -2,9 +2,12 @@ from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from app.mqtt_handler import send_mqtt_command
 from app import get_db
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from app.models.sensor_model import create_notification, get_current_sensor_data
 from bson import ObjectId
+
+# Indonesia timezone (WIB = UTC+7)
+WIB = timezone(timedelta(hours=7))
 
 control_bp = Blueprint('control', __name__)
 
@@ -45,7 +48,7 @@ def control_curtain():
         mqtt_message = {
             'mode': mode,
             'action': action,
-            'timestamp': datetime.utcnow().isoformat(),
+            'timestamp': datetime.now(WIB).isoformat(),
             'source': 'web'
         }
         
@@ -66,6 +69,23 @@ def control_curtain():
                     message=f'User {username} sent command: {action}',
                     priority='medium'
                 )
+            
+            # Create notification for auto mode enable/disable
+            elif mode == 'auto':
+                if action == 'enable':
+                    create_notification(
+                        type='auto_mode_control',
+                        title='Auto Mode Enabled',
+                        message=f'User {username} enabled auto mode',
+                        priority='medium'
+                    )
+                elif action == 'disable':
+                    create_notification(
+                        type='auto_mode_control',
+                        title='Auto Mode Disabled',
+                        message=f'User {username} disabled auto mode',
+                        priority='medium'
+                    )
             
             return jsonify({
                 'message': f'Command sent successfully: {mode} - {action}',
@@ -97,7 +117,12 @@ def get_control_status():
         # Convert to JSON serializable
         for log in recent_logs:
             log['_id'] = str(log['_id'])
-            log['timestamp'] = log['timestamp'].isoformat()
+            if 'timestamp' in log and log['timestamp']:
+                # MongoDB stores as UTC, convert to WIB for display
+                if log['timestamp'].tzinfo is None:
+                    log['timestamp'] = log['timestamp'].replace(tzinfo=timezone.utc).astimezone(WIB).isoformat()
+                else:
+                    log['timestamp'] = log['timestamp'].astimezone(WIB).isoformat()
         
         return jsonify({
             'recent_commands': recent_logs,
@@ -119,7 +144,7 @@ def log_control_action(user_id, username, mode, action, status):
         'mode': mode,
         'action': action,
         'status': status,
-        'timestamp': datetime.utcnow(),
+        'timestamp': datetime.now(WIB),
         'ip_address': request.remote_addr
     }
     
@@ -139,8 +164,8 @@ def update_curtain_data_from_command(mode, action):
         
         # Prepare update data
         update_data = {
-            'timestamp': datetime.utcnow(),
-            'updated_at': datetime.utcnow()
+            'timestamp': datetime.now(WIB),
+            'updated_at': datetime.now(WIB)
         }
         
         # Update position based on action (only for open/close)

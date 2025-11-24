@@ -1,7 +1,19 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from app import get_db
 from config import Config
 import json
+
+# Indonesia timezone (WIB = UTC+7)
+WIB = timezone(timedelta(hours=7))
+
+def make_aware(dt):
+    """Convert naive datetime to timezone-aware datetime (WIB)"""
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        # Naive datetime, assume it's UTC and convert to WIB
+        return dt.replace(tzinfo=timezone.utc).astimezone(WIB)
+    return dt
 
 def get_collection(collection_name):
     db = get_db()
@@ -24,9 +36,9 @@ def save_sensor_data(data):
         sensor_history_collection = get_collection('curtain_history')
         notifications_collection = get_collection('notifications')
         
-        # Add timestamp
-        data['timestamp'] = datetime.utcnow()
-        data['created_at'] = datetime.utcnow()
+        # Add timestamp (WIB timezone)
+        data['timestamp'] = datetime.now(WIB)
+        data['created_at'] = datetime.now(WIB)
         
         # Validate required fields
         required_fields = ['suhu', 'kelembapan', 'cahaya', 'posisi', 'status_tirai']
@@ -43,8 +55,12 @@ def save_sensor_data(data):
         check_sensor_thresholds(data)
         
         # Auto mode logic
+        print(f"🔍 Status tirai: {data['status_tirai']}")
         if data['status_tirai'] == 'Auto':
+            print("🤖 Auto mode is enabled, checking conditions...")
             handle_auto_mode(data)
+        else:
+            print("⚠️ Auto mode is disabled, skipping auto mode logic")
         
         # Upsert to current data collection
         result = sensor_data_collection.update_one(
@@ -64,26 +80,28 @@ def save_sensor_data(data):
         return False
 
 def get_auto_mode_rules():
-    """Get auto mode rules from database (use first available user's rules or default)"""
+    """Get global auto mode rules from database (shared by all users)"""
     try:
         rules_collection = get_collection('auto_mode_rules')
-        # Get first available rules (or could use global rules)
-        rules = rules_collection.find_one({'enabled': True})
+        # Get global rules (shared by all users)
+        rules = rules_collection.find_one({'_id': 'global'})
         
         if not rules:
             # Return default rules
             return {
                 'light_open_threshold': Config.LIGHT_OPEN_THRESHOLD,
                 'light_close_threshold': Config.LIGHT_CLOSE_THRESHOLD,
-                'temperature_threshold': Config.TEMPERATURE_THRESHOLD,
+                'temperature_high_threshold': Config.TEMPERATURE_HIGH_THRESHOLD,
+                'humidity_high_threshold': Config.HUMIDITY_HIGH_THRESHOLD,
+                'pir_enabled': True,
                 'enabled': True
             }
         
         # Remove MongoDB-specific fields
         rules.pop('_id', None)
-        rules.pop('user_id', None)
         rules.pop('created_at', None)
         rules.pop('updated_at', None)
+        rules.pop('updated_by', None)
         
         return rules
     except Exception as e:
@@ -92,7 +110,9 @@ def get_auto_mode_rules():
         return {
             'light_open_threshold': Config.LIGHT_OPEN_THRESHOLD,
             'light_close_threshold': Config.LIGHT_CLOSE_THRESHOLD,
-            'temperature_threshold': Config.TEMPERATURE_THRESHOLD,
+            'temperature_high_threshold': Config.TEMPERATURE_HIGH_THRESHOLD,
+            'humidity_high_threshold': Config.HUMIDITY_HIGH_THRESHOLD,
+            'pir_enabled': True,
             'enabled': True
         }
 
@@ -101,7 +121,7 @@ def check_sensor_thresholds(data):
     
     # Get temperature threshold from auto mode rules
     rules = get_auto_mode_rules()
-    temperature_threshold = rules.get('temperature_threshold', Config.TEMPERATURE_THRESHOLD)
+    temperature_threshold = rules.get('temperature_high_threshold', Config.TEMPERATURE_HIGH_THRESHOLD)
     
     # Temperature alert
     if data['suhu'] > temperature_threshold:
@@ -116,44 +136,59 @@ def check_sensor_thresholds(data):
 
 def handle_auto_mode(data):
     """Handle automatic curtain control based on light sensor using user-defined rules"""
-    light_level = data['cahaya']
-    current_position = data['posisi']
-    
-    # Get auto mode rules from database (use global rules or first user's rules)
-    rules = get_auto_mode_rules()
-    
-    if not rules or not rules.get('enabled', True):
-        return  # Auto mode is disabled
-    
-    light_open_threshold = rules.get('light_open_threshold', Config.LIGHT_OPEN_THRESHOLD)
-    light_close_threshold = rules.get('light_close_threshold', Config.LIGHT_CLOSE_THRESHOLD)
-    
-    if light_level > light_close_threshold and current_position != 'Tertutup':
-        # Too bright, close curtain
-        send_mqtt_command({'mode': 'auto', 'action': 'close'})
-        create_notification(
-            type='auto_mode',
-            title='Auto Mode Action',
-            message=f'Curtain closing automatically due to high light level ({light_level} lux > {light_close_threshold} lux)',
-            priority='low'
-        )
+    try:
+        light_level = data['cahaya']
+        current_position = data['posisi']
         
-    elif light_level < light_open_threshold and current_position != 'Terbuka':
-        # Too dark, open curtain
-        send_mqtt_command({'mode': 'auto', 'action': 'open'})
-        create_notification(
-            type='auto_mode',
-            title='Auto Mode Action',
-            message=f'Curtain opening automatically due to low light level ({light_level} lux < {light_open_threshold} lux)',
-            priority='low'
-        )
+        print(f"🤖 Auto mode check: Light={light_level} lux, Position={current_position}")
+        
+        # Get auto mode rules from database (use global rules or first user's rules)
+        rules = get_auto_mode_rules()
+        
+        if not rules or not rules.get('enabled', True):
+            print("⚠️ Auto mode is disabled")
+            return  # Auto mode is disabled
+        
+        light_open_threshold = rules.get('light_open_threshold', Config.LIGHT_OPEN_THRESHOLD)
+        light_close_threshold = rules.get('light_close_threshold', Config.LIGHT_CLOSE_THRESHOLD)
+        
+        print(f"📊 Thresholds: Open < {light_open_threshold} lux, Close > {light_close_threshold} lux")
+        
+        if light_level > light_close_threshold and current_position != 'Tertutup':
+            # Too bright, close curtain
+            print(f"🌞 Too bright! Closing curtain ({light_level} > {light_close_threshold})")
+            send_mqtt_command({'mode': 'auto', 'action': 'close'})
+            create_notification(
+                type='auto_mode',
+                title='Auto Mode Action',
+                message=f'Curtain closing automatically due to high light level ({light_level} lux > {light_close_threshold} lux)',
+                priority='low'
+            )
+            
+        elif light_level < light_open_threshold and current_position != 'Terbuka':
+            # Too dark, open curtain
+            print(f"🌙 Too dark! Opening curtain ({light_level} < {light_open_threshold})")
+            send_mqtt_command({'mode': 'auto', 'action': 'open'})
+            create_notification(
+                type='auto_mode',
+                title='Auto Mode Action',
+                message=f'Curtain opening automatically due to low light level ({light_level} lux < {light_open_threshold} lux)',
+                priority='low'
+            )
+        else:
+            print(f"✅ Light level OK, no action needed")
+            
+    except Exception as e:
+        print(f"❌ Error in handle_auto_mode: {e}")
+        import traceback
+        traceback.print_exc()
 
 def check_and_save_history():
     """Check if 1 minute has passed since last history save and save if needed"""
     sensor_data_collection = get_collection('curtain_data')
     history_tracker = sensor_data_collection.find_one({'_id': 'history_tracker'})
     
-    current_time = datetime.utcnow()
+    current_time = datetime.now(WIB)
     
     if not history_tracker:
         # Initialize tracker
@@ -165,7 +200,7 @@ def check_and_save_history():
         save_to_history()
     else:
         # Check if 1 minute (60 seconds) has passed since last save
-        last_save_time = history_tracker['last_save_time']
+        last_save_time = make_aware(history_tracker['last_save_time'])
         time_diff = current_time - last_save_time
         
         if time_diff >= timedelta(minutes=1):
@@ -187,7 +222,7 @@ def save_to_history():
             # Remove _id and create new document for history
             history_data = current_data.copy()
             history_data.pop('_id', None)
-            history_data['history_timestamp'] = datetime.utcnow()
+            history_data['history_timestamp'] = datetime.now(WIB)
             
             sensor_history_collection.insert_one(history_data)
             print("✅ Data saved to history")
@@ -200,31 +235,59 @@ def get_current_sensor_data():
     sensor_data_collection = get_collection('curtain_data')
     return sensor_data_collection.find_one({'_id': 'current'})
 
+def get_latest_sensor_data():
+    """Get the latest sensor data from database (alias for get_current_sensor_data)"""
+    try:
+        collection = get_collection('curtain_data')
+        # Get the most recent sensor data
+        latest_data = collection.find_one({'_id': 'current'})
+        
+        if latest_data:
+            # Remove MongoDB _id field
+            latest_data.pop('_id', None)
+            return latest_data
+        
+        return None
+        
+    except Exception as e:
+        print(f"❌ Error getting latest sensor data: {e}")
+        return None
+
 def get_sensor_history(hours=24):
     """Get sensor history for specified time range"""
     sensor_history_collection = get_collection('curtain_history')
-    time_threshold = datetime.utcnow() - timedelta(hours=hours)
+    time_threshold = datetime.now(WIB) - timedelta(hours=hours)
+    
+    # Query with UTC time for compatibility with old data
+    time_threshold_utc = time_threshold.astimezone(timezone.utc).replace(tzinfo=None)
     
     return list(sensor_history_collection.find({
-        'history_timestamp': {'$gte': time_threshold}
+        'history_timestamp': {'$gte': time_threshold_utc}
     }).sort('history_timestamp', -1).limit(1000))
 
 def create_notification(type, title, message, priority='medium'):
     """Create notification entry"""
-    notifications_collection = get_collection('notifications')
-    
-    notification = {
-        'type': type,
-        'title': title,
-        'message': message,
-        'priority': priority,
-        'read': False,
-        'timestamp': datetime.utcnow(),
-        'created_at': datetime.utcnow()
-    }
-    
-    notifications_collection.insert_one(notification)
-    print(f"✅ Notification created: {title}")
+    try:
+        notifications_collection = get_collection('notifications')
+        
+        notification = {
+            'type': type,
+            'title': title,
+            'message': message,
+            'priority': priority,
+            'read': False,
+            'timestamp': datetime.now(WIB),
+            'created_at': datetime.now(WIB)
+        }
+        
+        result = notifications_collection.insert_one(notification)
+        print(f"✅ Notification created: {title} (ID: {result.inserted_id})")
+        return True
+    except Exception as e:
+        print(f"❌ Error creating notification: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
 
 def process_sensor_data(mqtt_message):
     """Process sensor data received via MQTT"""

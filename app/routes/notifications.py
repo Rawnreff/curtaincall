@@ -8,6 +8,10 @@ from app.models.notification_model import (
     get_notification_stats
 )
 from bson import ObjectId
+from datetime import datetime, timedelta, timezone
+
+# Indonesia timezone (WIB = UTC+7)
+WIB = timezone(timedelta(hours=7))
 
 notifications_bp = Blueprint('notifications', __name__)
 
@@ -30,12 +34,24 @@ def get_notifications():
             notification_id = str(notification['_id'])
             notification['id'] = notification_id  # Add 'id' field for frontend compatibility
             notification['_id'] = notification_id  # Keep '_id' for backward compatibility
-            notification['timestamp'] = notification['timestamp'].isoformat()
+            
+            # Convert timestamp from UTC to WIB
+            if 'timestamp' in notification and notification['timestamp']:
+                if notification['timestamp'].tzinfo is None:
+                    notification['timestamp'] = notification['timestamp'].replace(tzinfo=timezone.utc).astimezone(WIB).isoformat()
+                else:
+                    notification['timestamp'] = notification['timestamp'].astimezone(WIB).isoformat()
+            
             # Ensure 'read' field exists (default to False if not present)
             if 'read' not in notification:
                 notification['read'] = False
+            
+            # Convert read_at timestamp from UTC to WIB
             if 'read_at' in notification and notification['read_at']:
-                notification['read_at'] = notification['read_at'].isoformat()
+                if notification['read_at'].tzinfo is None:
+                    notification['read_at'] = notification['read_at'].replace(tzinfo=timezone.utc).astimezone(WIB).isoformat()
+                else:
+                    notification['read_at'] = notification['read_at'].astimezone(WIB).isoformat()
         
         return jsonify(notifications), 200
         
