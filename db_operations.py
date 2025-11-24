@@ -4,8 +4,11 @@ Handles MongoDB connections and database operations for voice control
 """
 
 from flask_pymongo import PyMongo
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from flask import request
+
+# Indonesia timezone (WIB = UTC+7)
+WIB = timezone(timedelta(hours=7))
 
 # Global MongoDB instance
 mongo = None
@@ -79,8 +82,8 @@ def update_curtain_data(intent, preserve_sensors=True):
         
         # Prepare update data
         update_data = {
-            'timestamp': datetime.utcnow(),
-            'updated_at': datetime.utcnow()
+            'timestamp': datetime.now(WIB),
+            'updated_at': datetime.now(WIB)
         }
         
         # Map intent to posisi field
@@ -167,7 +170,7 @@ def log_voice_control(intent, transcript, status, ip_address, confidence):
             'mode': 'manual',
             'action': action,
             'status': status,
-            'timestamp': datetime.utcnow(),
+            'timestamp': datetime.now(WIB),
             'ip_address': ip_address,
             'transcript': transcript,
             'confidence': confidence
@@ -214,8 +217,8 @@ def create_voice_notification(intent, transcript, success):
                 'message': f"Voice command executed: '{transcript}' → {action}",
                 'priority': 'medium',
                 'read': False,
-                'timestamp': datetime.utcnow(),
-                'created_at': datetime.utcnow()
+                'timestamp': datetime.now(WIB),
+                'created_at': datetime.now(WIB)
             }
         else:
             notification = {
@@ -224,8 +227,8 @@ def create_voice_notification(intent, transcript, success):
                 'message': f"Voice command failed: '{transcript}' - Low confidence or invalid intent",
                 'priority': 'high',
                 'read': False,
-                'timestamp': datetime.utcnow(),
-                'created_at': datetime.utcnow()
+                'timestamp': datetime.now(WIB),
+                'created_at': datetime.now(WIB)
             }
         
         notifications_collection.insert_one(notification)

@@ -6,7 +6,10 @@ Handles MQTT connections and command sending to ESP32
 import paho.mqtt.client as mqtt
 import json
 import os
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
+
+# Indonesia timezone (WIB = UTC+7)
+WIB = timezone(timedelta(hours=7))
 
 # Global MQTT client instance
 mqtt_client = None
@@ -103,7 +106,7 @@ def send_voice_command(intent, transcript):
             'mode': 'manual',
             'action': action,
             'source': 'voice',
-            'timestamp': datetime.utcnow().isoformat(),
+            'timestamp': datetime.now(WIB).isoformat(),
             'transcript': transcript
         }
         

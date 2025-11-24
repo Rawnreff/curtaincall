@@ -42,7 +42,7 @@ data_latih = [
     ("singkapkan tirai", "BUKA"), ("gorden buka sekarang", "BUKA"), ("buka yang lebar", "BUKA"),
     ("tarik gordennya", "BUKA"), ("buka semua", "BUKA"), ("buka sedikit gorden", "BUKA"),
     ("saya ingin lihat pemandangan", "BUKA"), ("biar terang", "BUKA"), ("aku mau terang", "BUKA"),
-    ("saya sudah sampai rumah", "BUKA"), ("gelap", "BUKA"), ("selamat pagi", "BUKA"),
+    ("saya sudah sampai rumah", "BUKA"), ("gelap", "BUKA"), ("selamat pagi", "BUKA"), ("saya sudah bangun", "BUKA"),
     
     # --- Perintah TUTUP ---
     ("tutup gorden", "TUTUP"), ("tutup tirai", "TUTUP"), ("silau", "TUTUP"),
@@ -50,7 +50,7 @@ data_latih = [
     ("saya mau tidur", "TUTUP"), ("aku pergi", "TUTUP"), ("tutupin gordennya", "TUTUP"),
     ("tutup sekarang", "TUTUP"), ("gelapkan ruangan", "TUTUP"), ("gordennya ditutup", "TUTUP"),
     ("tutup rapat gorden", "TUTUP"), ("saya mau privasi", "TUTUP"), ("sudah malam", "TUTUP"),
-    ("tutup semua tirai", "TUTUP"), ("selamat malam", "TUTUP"),
+    ("tutup semua tirai", "TUTUP"), ("selamat malam", "TUTUP"), ("sudah malam", "TUTUP"),
 
     # --- Variasi Singkat ---
     ("buka", "BUKA"), ("tutup", "TUTUP")
