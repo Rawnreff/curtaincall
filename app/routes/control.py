@@ -170,43 +170,43 @@ def update_curtain_data_from_command(mode, action):
         
         # Update position based on action (only for open/close)
         if action == 'open':
-            update_data['posisi'] = 'Terbuka'
+            update_data['position'] = 'Open'
         elif action == 'close':
-            update_data['posisi'] = 'Tertutup'
+            update_data['position'] = 'Close'
         else:
             # Preserve current position for enable/disable actions
-            if current_data and 'posisi' in current_data:
-                update_data['posisi'] = current_data['posisi']
+            if current_data and 'position' in current_data:
+                update_data['position'] = current_data['position']
             else:
-                update_data['posisi'] = 'Unknown'
+                update_data['position'] = 'Unknown'
         
-        # Update status_tirai based on mode and action
+        # Update curtain_status based on mode and action
         if mode == 'auto' and action == 'enable':
-            update_data['status_tirai'] = 'Auto'
-            print(f"✅ Setting status_tirai to 'Auto'")
+            update_data['curtain_status'] = 'Auto'
+            print(f"✅ Setting curtain_status to 'Auto'")
         elif mode == 'auto' and action == 'disable':
-            update_data['status_tirai'] = 'Manual'
-            print(f"✅ Setting status_tirai to 'Manual'")
+            update_data['curtain_status'] = 'Manual'
+            print(f"✅ Setting curtain_status to 'Manual'")
         elif mode == 'manual':
-            # For manual mode actions (open/close), keep current status_tirai
-            if current_data and 'status_tirai' in current_data:
-                update_data['status_tirai'] = current_data['status_tirai']
+            # For manual mode actions (open/close), keep current curtain_status
+            if current_data and 'curtain_status' in current_data:
+                update_data['curtain_status'] = current_data['curtain_status']
             else:
-                update_data['status_tirai'] = 'Manual'
+                update_data['curtain_status'] = 'Manual'
         
         # Preserve sensor data if exists
         if current_data:
-            if 'suhu' in current_data:
-                update_data['suhu'] = current_data['suhu']
-            if 'kelembapan' in current_data:
-                update_data['kelembapan'] = current_data['kelembapan']
-            if 'cahaya' in current_data:
-                update_data['cahaya'] = current_data['cahaya']
+            if 'temperature' in current_data:
+                update_data['temperature'] = current_data['temperature']
+            if 'humidity' in current_data:
+                update_data['humidity'] = current_data['humidity']
+            if 'light' in current_data:
+                update_data['light'] = current_data['light']
         else:
             # Set default values if no current data exists
-            update_data['suhu'] = 0.0
-            update_data['kelembapan'] = 0.0
-            update_data['cahaya'] = 0
+            update_data['temperature'] = 0.0
+            update_data['humidity'] = 0.0
+            update_data['light'] = 0
         
         # Upsert the data
         result = curtain_data_collection.update_one(

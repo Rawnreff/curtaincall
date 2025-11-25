@@ -28,11 +28,11 @@ def get_sensor_data():
         if not data:
             return jsonify({
                 'error': 'No sensor data available',
-                'suhu': 0,
-                'kelembapan': 0,
-                'cahaya': 0,
-                'posisi': 'Unknown',
-                'status_tirai': 'Unknown',
+                'temperature': 0,
+                'humidity': 0,
+                'light': 0,
+                'position': 'Unknown',
+                'curtain_status': 'Unknown',
                 'timestamp': None
             }), 200
         
@@ -62,7 +62,7 @@ def save_sensor_data_endpoint():
             return jsonify({'error': 'No data provided'}), 400
         
         # Validate required fields
-        required_fields = ['suhu', 'kelembapan', 'cahaya', 'posisi', 'status_tirai']
+        required_fields = ['temperature', 'humidity', 'light', 'position', 'curtain_status']
         for field in required_fields:
             if field not in data:
                 return jsonify({'error': f'Missing required field: {field}'}), 400
@@ -138,9 +138,9 @@ def get_sensor_stats():
             return jsonify({'message': 'No data available for statistics'}), 200
         
         # Calculate basic statistics
-        temperatures = [d['suhu'] for d in history_data if 'suhu' in d]
-        humidity = [d['kelembapan'] for d in history_data if 'kelembapan' in d]
-        light = [d['cahaya'] for d in history_data if 'cahaya' in d]
+        temperatures = [d['temperature'] for d in history_data if 'temperature' in d]
+        humidity = [d['humidity'] for d in history_data if 'humidity' in d]
+        light = [d['light'] for d in history_data if 'light' in d]
         
         stats = {
             'temperature': {

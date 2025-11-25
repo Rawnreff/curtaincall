@@ -1,7 +1,7 @@
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity
 from app.models.user_model import User
-from app import get_db
+from app import get_db, bcrypt
 from bson import ObjectId
 from datetime import datetime, timedelta, timezone
 import re
@@ -137,10 +137,28 @@ def update_profile():
         if not data:
             return jsonify({'error': 'No data provided'}), 400
         
-        # Only allow updating name for now
+        # Allow updating name and email
         update_data = {}
         if 'name' in data:
-            update_data['name'] = data['name']
+            if not data['name'] or len(data['name'].strip()) == 0:
+                return jsonify({'error': 'Name cannot be empty'}), 400
+            update_data['name'] = data['name'].strip()
+        
+        if 'email' in data:
+            email = data['email'].strip()
+            if not re.match(r'[^@]+@[^@]+\.[^@]+', email):
+                return jsonify({'error': 'Invalid email format'}), 400
+            
+            # Check if email already exists (excluding current user)
+            users_collection = get_db().get_collection('users')
+            existing_user = users_collection.find_one({
+                'email': email,
+                '_id': {'$ne': ObjectId(user_id)}
+            })
+            if existing_user:
+                return jsonify({'error': 'Email already in use'}), 400
+            
+            update_data['email'] = email
         
         if update_data:
             users_collection = get_db().get_collection('users')
@@ -163,4 +181,71 @@ def update_profile():
         
     except Exception as e:
         print(f"❌ Update profile error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@users_bp.route('/change-password', methods=['PUT'])
+@jwt_required()
+def change_password():
+    """Change user password"""
+    try:
+        user_id = get_jwt_identity()
+        print(f"🔑 Change password request for user_id: {user_id}")
+        
+        data = request.get_json()
+        print(f"📦 Request data keys: {list(data.keys()) if data else 'None'}")
+        
+        if not data:
+            return jsonify({'error': 'No data provided'}), 400
+        
+        current_password = data.get('current_password')
+        new_password = data.get('new_password')
+        
+        print(f"🔍 Has current_password: {bool(current_password)}")
+        print(f"🔍 Has new_password: {bool(new_password)}")
+        
+        if not current_password or not new_password:
+            return jsonify({'error': 'Current password and new password are required'}), 400
+        
+        if len(new_password) < 6:
+            return jsonify({'error': 'New password must be at least 6 characters'}), 400
+        
+        # Get user and verify current password
+        users_collection = get_db().get_collection('users')
+        user = users_collection.find_one({'_id': ObjectId(user_id)})
+        
+        if not user:
+            print(f"❌ User not found: {user_id}")
+            return jsonify({'error': 'User not found'}), 404
+        
+        print(f"✅ User found: {user.get('email')}")
+        
+        # Verify current password using bcrypt
+        password_match = bcrypt.check_password_hash(user['password'], current_password)
+        print(f"🔐 Password verification: {password_match}")
+        
+        if not password_match:
+            return jsonify({'error': 'Current password is incorrect'}), 401
+        
+        # Update password using bcrypt
+        hashed_password = bcrypt.generate_password_hash(new_password).decode('utf-8')
+        print(f"🔒 New password hashed, updating database...")
+        
+        users_collection.update_one(
+            {'_id': ObjectId(user_id)},
+            {'$set': {
+                'password': hashed_password,
+                'updated_at': datetime.now(WIB)
+            }}
+        )
+        
+        print(f"✅ Password updated successfully for user: {user.get('email')}")
+        
+        return jsonify({
+            'message': 'Password changed successfully'
+        }), 200
+        
+    except Exception as e:
+        import traceback
+        print(f"❌ Change password error: {e}")
+        traceback.print_exc()
         return jsonify({'error': str(e)}), 500

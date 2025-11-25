@@ -24,11 +24,11 @@ def save_sensor_data(data):
     Save sensor data from ESP32 to MongoDB
     Expected data format:
     {
-        "suhu": 29.3,
-        "kelembapan": 55.8,
-        "cahaya": 420,
-        "posisi": "Terbuka",
-        "status_tirai": "Auto"
+        "temperature": 29.3,
+        "humidity": 55.8,
+        "light": 420,
+        "position": "Open",
+        "curtain_status": "Auto"
     }
     """
     try:
@@ -41,15 +41,15 @@ def save_sensor_data(data):
         data['created_at'] = datetime.now(WIB)
         
         # Validate required fields
-        required_fields = ['suhu', 'kelembapan', 'cahaya', 'posisi', 'status_tirai']
+        required_fields = ['temperature', 'humidity', 'light', 'position', 'curtain_status']
         for field in required_fields:
             if field not in data:
                 raise ValueError(f"Missing required field: {field}")
         
         # Convert numeric fields
-        data['suhu'] = float(data['suhu'])
-        data['kelembapan'] = float(data['kelembapan'])
-        data['cahaya'] = int(data['cahaya'])
+        data['temperature'] = float(data['temperature'])
+        data['humidity'] = float(data['humidity'])
+        data['light'] = int(data['light'])
         
         # Check thresholds and trigger alerts
         check_sensor_thresholds(data)
@@ -72,8 +72,8 @@ def save_sensor_data(data):
         # ═══════════════════════════════════════════════════════════════
         
         # Auto mode logic - DISABLED (handled by ESP32)
-        # print(f"🔍 Status tirai: {data['status_tirai']}")
-        # if data['status_tirai'] == 'Auto':
+        # print(f"🔍 Curtain status: {data['curtain_status']}")
+        # if data['curtain_status'] == 'Auto':
         #     print("🤖 Auto mode is enabled, checking conditions...")
         #     handle_auto_mode(data)  # DISABLED - causes duplicate notifications
         # else:
@@ -141,11 +141,11 @@ def check_sensor_thresholds(data):
     temperature_threshold = rules.get('temperature_high_threshold', Config.TEMPERATURE_HIGH_THRESHOLD)
     
     # Temperature alert
-    if data['suhu'] > temperature_threshold:
+    if data['temperature'] > temperature_threshold:
         create_notification(
             type='temperature_high',
             title='High Temperature Alert',
-            message=f'Temperature is {data["suhu"]}°C, exceeding safety threshold ({temperature_threshold}°C)',
+            message=f'Temperature is {data["temperature"]}°C, exceeding safety threshold ({temperature_threshold}°C)',
             priority='high'
         )
         # Activate buzzer via MQTT
@@ -162,8 +162,8 @@ def handle_auto_mode(data):
     implements priority-based logic.
     """
     try:
-        light_level = data['cahaya']
-        current_position = data['posisi']
+        light_level = data['light']
+        current_position = data['position']
         
         print(f"🤖 Auto mode check: Light={light_level} lux, Position={current_position}")
         
@@ -179,13 +179,13 @@ def handle_auto_mode(data):
         
         print(f"📊 Thresholds: Open < {light_open_threshold} lux, Close > {light_close_threshold} lux")
         
-        if light_level > light_close_threshold and current_position != 'Tertutup':
+        if light_level > light_close_threshold and current_position != 'Close':
             # Too bright, close curtain
             print(f"🌞 Too bright! Closing curtain ({light_level} > {light_close_threshold})")
             send_mqtt_command({'mode': 'auto', 'action': 'close'})
             # Note: Notification is created by handle_auto_action_message() when ESP32 sends enhanced action message
             
-        elif light_level < light_open_threshold and current_position != 'Terbuka':
+        elif light_level < light_open_threshold and current_position != 'Open':
             # Too dark, open curtain
             print(f"🌙 Too dark! Opening curtain ({light_level} < {light_open_threshold})")
             send_mqtt_command({'mode': 'auto', 'action': 'open'})

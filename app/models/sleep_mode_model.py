@@ -121,7 +121,7 @@ def activate_sleep_mode(user_id=None):
                 '$set': {
                     'sleep_mode': True,
                     'status_tirai': 'Manual',  # Disable auto mode
-                    'posisi': 'Tertutup',  # Will be closed by ESP32
+                    'posisi': 'Close',  # Will be closed by ESP32
                     'timestamp': datetime.now(WIB)
                 }
             }

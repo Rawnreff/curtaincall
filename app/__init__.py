@@ -360,8 +360,8 @@ def handle_status_request(message):
         if latest_data:
             # Send current status to ESP32
             status_response = {
-                "posisi": latest_data.get('posisi', 'Tertutup'),
-                "status_tirai": latest_data.get('status_tirai', 'Manual'),
+                "position": latest_data.get('position', 'Close'),
+                "curtain_status": latest_data.get('curtain_status', 'Manual'),
                 "timestamp": datetime.now(WIB).isoformat()
             }
             
@@ -371,8 +371,8 @@ def handle_status_request(message):
         else:
             # No data in database, send default
             status_response = {
-                "posisi": "Tertutup",
-                "status_tirai": "Manual",
+                "position": "Close",
+                "curtain_status": "Manual",
                 "timestamp": datetime.now(WIB).isoformat()
             }
             response_message = json.dumps(status_response)
