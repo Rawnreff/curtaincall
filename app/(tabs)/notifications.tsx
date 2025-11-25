@@ -5,6 +5,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { notificationService } from '../services/notificationService';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
+import { useNotifications } from '../contexts/NotificationContext';
 
 export default function NotificationsScreen() {
   const insets = useSafeAreaInsets();
@@ -14,6 +15,9 @@ export default function NotificationsScreen() {
   const [selectedNotification, setSelectedNotification] = useState<any>(null);
   const [showDetailModal, setShowDetailModal] = useState(false);
 
+  // Get notification context methods
+  const { refreshUnreadCount, decrementUnreadCount } = useNotifications();
+
   useEffect(() => {
     loadNotifications();
   }, []);
@@ -22,6 +26,7 @@ export default function NotificationsScreen() {
   useFocusEffect(
     useCallback(() => {
       loadNotifications();
+      refreshUnreadCount(); // Refresh badge count when tab is focused
     }, [])
   );
 
@@ -56,24 +61,33 @@ export default function NotificationsScreen() {
     // Show detail modal
     setSelectedNotification(notification);
     setShowDetailModal(true);
-    
+
     // Mark as read if unread
     const notificationId = notification.id || notification._id;
     if (!notification.read && notificationId) {
       try {
         console.log('📬 Marking notification as read:', notificationId);
-        await notificationService.markAsRead(notificationId);
-        console.log('✅ Notification marked as read successfully');
-        // Update local state
-        setNotifications(prev => 
-          prev.map(n => 
-            (n.id === notificationId || n._id === notificationId) 
-              ? { ...n, read: true } 
+
+        // Immediately decrement badge count for instant feedback
+        decrementUnreadCount();
+
+        // Update local state immediately
+        setNotifications(prev =>
+          prev.map(n =>
+            (n.id === notificationId || n._id === notificationId)
+              ? { ...n, read: true }
               : n
           )
         );
+
+        // Send API request in background
+        await notificationService.markAsRead(notificationId);
+        console.log('✅ Notification marked as read successfully');
+
       } catch (error: any) {
         console.error('❌ Failed to mark notification as read:', error);
+        // Refresh to sync state if API call failed
+        refreshUnreadCount();
       }
     }
   };
@@ -86,7 +100,9 @@ export default function NotificationsScreen() {
   const markAllAsRead = async () => {
     try {
       await notificationService.markAllAsRead();
-      loadNotifications();
+      await loadNotifications();
+      // Refresh badge count after marking all as read
+      await refreshUnreadCount();
     } catch (error: any) {
       console.error('Failed to mark notifications as read:', error);
     }
@@ -97,8 +113,8 @@ export default function NotificationsScreen() {
       case 'temperature_high': return ['#fa709a', '#fee140'];
       case 'motor_error': return ['#f093fb', '#f5576c'];
       case 'auto_mode': return ['#4facfe', '#00f2fe'];
-      case 'auto_mode_control': return ['#667eea', '#764ba2'];
-      case 'auto_mode_settings': return ['#10b981', '#059669'];
+      case 'auto_mode_control': return ['#4facfe', '#00f2fe'];
+      case 'auto_mode_settings': return ['#4facfe', '#00f2fe'];
       case 'manual_control': return ['#10b981', '#059669'];
       case 'voice_control': return ['#667eea', '#764ba2'];
       case 'voice_control_error': return ['#f5576c', '#f093fb'];
@@ -132,7 +148,7 @@ export default function NotificationsScreen() {
 
   const NotificationItem = ({ item }: any) => {
     const isUnread = !item.read;
-    
+
     return (
       <TouchableOpacity
         style={[styles.notificationItem, isUnread && styles.notificationItemUnread]}
@@ -146,14 +162,14 @@ export default function NotificationsScreen() {
             end={{ x: 1, y: 1 }}
             style={styles.notificationIconGradient}
           >
-            <Ionicons 
-              name={getNotificationIcon(item.type)} 
-              size={24} 
-              color="#FFFFFF" 
+            <Ionicons
+              name={getNotificationIcon(item.type)}
+              size={24}
+              color="#FFFFFF"
             />
           </LinearGradient>
         </View>
-        
+
         <View style={styles.notificationContent}>
           <View style={styles.notificationHeader}>
             <Text style={[styles.notificationTitle, isUnread && styles.notificationTitleUnread]}>
@@ -179,284 +195,267 @@ export default function NotificationsScreen() {
 
   return (
     <>
-    <ScrollView 
-      style={styles.container}
-      contentContainerStyle={{ paddingTop: insets.top + 20 }}
-      refreshControl={
-        <RefreshControl 
-          refreshing={refreshing} 
-          onRefresh={onRefresh}
-          tintColor="#667eea"
-          colors={['#667eea']}
-        />
-      }
-      showsVerticalScrollIndicator={false}
-    >
-      {/* Header */}
-      <View style={styles.header}>
-        <View style={styles.headerLeft}>
-          <Text style={styles.title}>Alerts</Text>
-          {unreadCount > 0 && (
-            <View style={styles.unreadBadge}>
-              <Text style={styles.unreadBadgeText}>{unreadCount}</Text>
-            </View>
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={{ paddingTop: insets.top + 20 }}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor="#667eea"
+            colors={['#667eea']}
+          />
+        }
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Header */}
+        <View style={styles.header}>
+          <View style={styles.headerLeft}>
+            <Text style={styles.title}>Alerts</Text>
+            {unreadCount > 0 && (
+              <View style={styles.unreadBadge}>
+                <Text style={styles.unreadBadgeText}>{unreadCount}</Text>
+              </View>
+            )}
+          </View>
+          {notifications.length > 0 && unreadCount > 0 && (
+            <TouchableOpacity style={styles.markAllButton} onPress={markAllAsRead}>
+              <LinearGradient
+                colors={['#667eea', '#764ba2']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.markAllGradient}
+              >
+                <Ionicons name="checkmark-done" size={16} color="#FFFFFF" />
+                <Text style={styles.markAllText}>Mark All</Text>
+              </LinearGradient>
+            </TouchableOpacity>
           )}
         </View>
-        {notifications.length > 0 && unreadCount > 0 && (
-          <TouchableOpacity style={styles.markAllButton} onPress={markAllAsRead}>
-            <LinearGradient
-              colors={['#667eea', '#764ba2']}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={styles.markAllGradient}
-            >
-              <Ionicons name="checkmark-done" size={16} color="#FFFFFF" />
-              <Text style={styles.markAllText}>Mark All</Text>
-            </LinearGradient>
-          </TouchableOpacity>
+
+        <Text style={styles.subtitle}>System notifications and warnings</Text>
+
+        {loading ? (
+          <View style={styles.loadingContainer}>
+            <View style={styles.loadingSpinner}>
+              <LinearGradient
+                colors={['#667eea', '#764ba2']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.loadingGradient}
+              >
+                <Ionicons name="notifications" size={32} color="#FFFFFF" />
+              </LinearGradient>
+            </View>
+            <Text style={styles.loadingText}>Loading notifications...</Text>
+          </View>
+        ) : notifications.length === 0 ? (
+          <View style={styles.emptyContainer}>
+            <View style={styles.emptyIcon}>
+              <LinearGradient
+                colors={['#10b981', '#059669']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.emptyIconGradient}
+              >
+                <Ionicons name="checkmark-circle" size={64} color="#FFFFFF" />
+              </LinearGradient>
+            </View>
+            <Text style={styles.emptyTitle}>All Caught Up!</Text>
+            <Text style={styles.emptyText}>
+              No notifications at the moment. We'll notify you when something important happens.
+            </Text>
+          </View>
+        ) : (
+          <View style={styles.notificationsList}>
+            {notifications.map((notification, index) => (
+              <NotificationItem key={index} item={notification} />
+            ))}
+          </View>
         )}
-      </View>
 
-      <Text style={styles.subtitle}>System notifications and warnings</Text>
-
-      {loading ? (
-        <View style={styles.loadingContainer}>
-          <View style={styles.loadingSpinner}>
-            <LinearGradient
-              colors={['#667eea', '#764ba2']}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={styles.loadingGradient}
-            >
-              <Ionicons name="notifications" size={32} color="#FFFFFF" />
-            </LinearGradient>
-          </View>
-          <Text style={styles.loadingText}>Loading notifications...</Text>
-        </View>
-      ) : notifications.length === 0 ? (
-        <View style={styles.emptyContainer}>
-          <View style={styles.emptyIcon}>
-            <LinearGradient
-              colors={['#10b981', '#059669']}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={styles.emptyIconGradient}
-            >
-              <Ionicons name="checkmark-circle" size={64} color="#FFFFFF" />
-            </LinearGradient>
-          </View>
-          <Text style={styles.emptyTitle}>All Caught Up!</Text>
-          <Text style={styles.emptyText}>
-            No notifications at the moment. We'll notify you when something important happens.
-          </Text>
-        </View>
-      ) : (
-        <View style={styles.notificationsList}>
-          {notifications.map((notification, index) => (
-            <NotificationItem key={index} item={notification} />
-          ))}
-        </View>
-      )}
-
-      {/* Alert Types Info */}
-      <View style={styles.infoCard}>
-        <View style={styles.infoHeader}>
-          <Ionicons name="information-circle" size={24} color="#667eea" />
-          <Text style={styles.infoTitle}>Alert Types</Text>
-        </View>
-        
-        <View style={styles.alertTypesList}>
-          <View style={styles.alertTypeItem}>
-            <View style={styles.alertTypeIconContainer}>
-              <LinearGradient
-                colors={['#fa709a', '#fee140']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={styles.alertTypeIconGradient}
-              >
-                <Ionicons name="thermometer" size={20} color="#FFFFFF" />
-              </LinearGradient>
-            </View>
-            <View style={styles.alertTypeContent}>
-              <Text style={styles.alertTypeTitle}>High Temperature</Text>
-              <Text style={styles.alertTypeDesc}>Temperature above threshold</Text>
-            </View>
+        {/* Alert Types Info */}
+        <View style={styles.infoCard}>
+          <View style={styles.infoHeader}>
+            <Ionicons name="information-circle" size={24} color="#667eea" />
+            <Text style={styles.infoTitle}>Alert Types</Text>
           </View>
 
-          <View style={styles.alertTypeItem}>
-            <View style={styles.alertTypeIconContainer}>
-              <LinearGradient
-                colors={['#4facfe', '#00f2fe']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={styles.alertTypeIconGradient}
-              >
-                <Ionicons name="flash" size={20} color="#FFFFFF" />
-              </LinearGradient>
+          <View style={styles.alertTypesList}>
+            <View style={styles.alertTypeItem}>
+              <View style={styles.alertTypeIconContainer}>
+                <LinearGradient
+                  colors={['#fa709a', '#fee140']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.alertTypeIconGradient}
+                >
+                  <Ionicons name="thermometer" size={20} color="#FFFFFF" />
+                </LinearGradient>
+              </View>
+              <View style={styles.alertTypeContent}>
+                <Text style={styles.alertTypeTitle}>High Temperature</Text>
+                <Text style={styles.alertTypeDesc}>Temperature above threshold</Text>
+              </View>
             </View>
-            <View style={styles.alertTypeContent}>
-              <Text style={styles.alertTypeTitle}>Auto Mode Action</Text>
-              <Text style={styles.alertTypeDesc}>Automatic curtain adjustments</Text>
-            </View>
-          </View>
 
-          <View style={styles.alertTypeItem}>
-            <View style={styles.alertTypeIconContainer}>
-              <LinearGradient
-                colors={['#667eea', '#764ba2']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={styles.alertTypeIconGradient}
-              >
-                <Ionicons name="power" size={20} color="#FFFFFF" />
-              </LinearGradient>
+            <View style={styles.alertTypeItem}>
+              <View style={styles.alertTypeIconContainer}>
+                <LinearGradient
+                  colors={['#4facfe', '#00f2fe']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.alertTypeIconGradient}
+                >
+                  <Ionicons name="flash" size={20} color="#FFFFFF" />
+                </LinearGradient>
+              </View>
+              <View style={styles.alertTypeContent}>
+                <Text style={styles.alertTypeTitle}>Auto Mode Action</Text>
+                <Text style={styles.alertTypeDesc}>Automatic curtain adjustments</Text>
+              </View>
             </View>
-            <View style={styles.alertTypeContent}>
-              <Text style={styles.alertTypeTitle}>Auto Mode Control</Text>
-              <Text style={styles.alertTypeDesc}>Auto mode enabled/disabled</Text>
-            </View>
-          </View>
 
-          <View style={styles.alertTypeItem}>
-            <View style={styles.alertTypeIconContainer}>
-              <LinearGradient
-                colors={['#10b981', '#059669']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={styles.alertTypeIconGradient}
-              >
-                <Ionicons name="settings" size={20} color="#FFFFFF" />
-              </LinearGradient>
+            <View style={styles.alertTypeItem}>
+              <View style={styles.alertTypeIconContainer}>
+                <LinearGradient
+                  colors={['#4facfe', '#00f2fe']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.alertTypeIconGradient}
+                >
+                  <Ionicons name="power" size={20} color="#FFFFFF" />
+                </LinearGradient>
+              </View>
+              <View style={styles.alertTypeContent}>
+                <Text style={styles.alertTypeTitle}>Auto Mode Control</Text>
+                <Text style={styles.alertTypeDesc}>Auto mode enabled/disabled</Text>
+              </View>
             </View>
-            <View style={styles.alertTypeContent}>
-              <Text style={styles.alertTypeTitle}>Auto Mode Settings</Text>
-              <Text style={styles.alertTypeDesc}>Threshold settings updated</Text>
-            </View>
-          </View>
 
-          <View style={styles.alertTypeItem}>
-            <View style={styles.alertTypeIconContainer}>
-              <LinearGradient
-                colors={['#10b981', '#059669']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={styles.alertTypeIconGradient}
-              >
-                <Ionicons name="hand-left" size={20} color="#FFFFFF" />
-              </LinearGradient>
+            <View style={styles.alertTypeItem}>
+              <View style={styles.alertTypeIconContainer}>
+                <LinearGradient
+                  colors={['#4facfe', '#00f2fe']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.alertTypeIconGradient}
+                >
+                  <Ionicons name="settings" size={20} color="#FFFFFF" />
+                </LinearGradient>
+              </View>
+              <View style={styles.alertTypeContent}>
+                <Text style={styles.alertTypeTitle}>Auto Mode Settings</Text>
+                <Text style={styles.alertTypeDesc}>Threshold settings updated</Text>
+              </View>
             </View>
-            <View style={styles.alertTypeContent}>
-              <Text style={styles.alertTypeTitle}>Manual Control</Text>
-              <Text style={styles.alertTypeDesc}>User-initiated actions</Text>
-            </View>
-          </View>
 
-          <View style={styles.alertTypeItem}>
-            <View style={styles.alertTypeIconContainer}>
-              <LinearGradient
-                colors={['#667eea', '#764ba2']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={styles.alertTypeIconGradient}
-              >
-                <Ionicons name="mic" size={20} color="#FFFFFF" />
-              </LinearGradient>
+            <View style={styles.alertTypeItem}>
+              <View style={styles.alertTypeIconContainer}>
+                <LinearGradient
+                  colors={['#10b981', '#059669']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.alertTypeIconGradient}
+                >
+                  <Ionicons name="hand-left" size={20} color="#FFFFFF" />
+                </LinearGradient>
+              </View>
+              <View style={styles.alertTypeContent}>
+                <Text style={styles.alertTypeTitle}>Manual Control</Text>
+                <Text style={styles.alertTypeDesc}>User-initiated actions</Text>
+              </View>
             </View>
-            <View style={styles.alertTypeContent}>
-              <Text style={styles.alertTypeTitle}>Voice Control</Text>
-              <Text style={styles.alertTypeDesc}>Voice command executed</Text>
-            </View>
-          </View>
 
-          <View style={styles.alertTypeItem}>
-            <View style={styles.alertTypeIconContainer}>
-              <LinearGradient
-                colors={['#f5576c', '#f093fb']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={styles.alertTypeIconGradient}
-              >
-                <Ionicons name="mic-off" size={20} color="#FFFFFF" />
-              </LinearGradient>
+            <View style={styles.alertTypeItem}>
+              <View style={styles.alertTypeIconContainer}>
+                <LinearGradient
+                  colors={['#667eea', '#764ba2']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.alertTypeIconGradient}
+                >
+                  <Ionicons name="mic" size={20} color="#FFFFFF" />
+                </LinearGradient>
+              </View>
+              <View style={styles.alertTypeContent}>
+                <Text style={styles.alertTypeTitle}>Voice Control</Text>
+                <Text style={styles.alertTypeDesc}>Voice command executed</Text>
+              </View>
             </View>
-            <View style={styles.alertTypeContent}>
-              <Text style={styles.alertTypeTitle}>Voice Control Error</Text>
-              <Text style={styles.alertTypeDesc}>Voice command failed</Text>
-            </View>
-          </View>
 
-          <View style={styles.alertTypeItem}>
-            <View style={styles.alertTypeIconContainer}>
-              <LinearGradient
-                colors={['#FFA726', '#FF7043']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={styles.alertTypeIconGradient}
-              >
-                <Ionicons name="walk" size={20} color="#FFFFFF" />
-              </LinearGradient>
+            <View style={styles.alertTypeItem}>
+              <View style={styles.alertTypeIconContainer}>
+                <LinearGradient
+                  colors={['#f5576c', '#f093fb']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.alertTypeIconGradient}
+                >
+                  <Ionicons name="mic-off" size={20} color="#FFFFFF" />
+                </LinearGradient>
+              </View>
+              <View style={styles.alertTypeContent}>
+                <Text style={styles.alertTypeTitle}>Voice Control Error</Text>
+                <Text style={styles.alertTypeDesc}>Voice command failed</Text>
+              </View>
             </View>
-            <View style={styles.alertTypeContent}>
-              <Text style={styles.alertTypeTitle}>Motion Detected</Text>
-              <Text style={styles.alertTypeDesc}>PIR sensor triggered</Text>
-            </View>
-          </View>
 
-          <View style={styles.alertTypeItem}>
-            <View style={styles.alertTypeIconContainer}>
-              <LinearGradient
-                colors={['#FFA726', '#FF7043']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={styles.alertTypeIconGradient}
-              >
-                <Ionicons name="walk" size={20} color="#FFFFFF" />
-              </LinearGradient>
+            <View style={styles.alertTypeItem}>
+              <View style={styles.alertTypeIconContainer}>
+                <LinearGradient
+                  colors={['#FFA726', '#FF7043']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.alertTypeIconGradient}
+                >
+                  <Ionicons name="walk" size={20} color="#FFFFFF" />
+                </LinearGradient>
+              </View>
+              <View style={styles.alertTypeContent}>
+                <Text style={styles.alertTypeTitle}>Motion Detection</Text>
+                <Text style={styles.alertTypeDesc}>Motion detection enabled/disabled/triggered</Text>
+              </View>
             </View>
-            <View style={styles.alertTypeContent}>
-              <Text style={styles.alertTypeTitle}>PIR Settings</Text>
-              <Text style={styles.alertTypeDesc}>Motion detection enabled/disabled</Text>
-            </View>
-          </View>
 
-          <View style={styles.alertTypeItem}>
-            <View style={styles.alertTypeIconContainer}>
-              <LinearGradient
-                colors={['#f093fb', '#f5576c']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={styles.alertTypeIconGradient}
-              >
-                <Ionicons name="construct" size={20} color="#FFFFFF" />
-              </LinearGradient>
+            <View style={styles.alertTypeItem}>
+              <View style={styles.alertTypeIconContainer}>
+                <LinearGradient
+                  colors={['#f093fb', '#f5576c']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.alertTypeIconGradient}
+                >
+                  <Ionicons name="construct" size={20} color="#FFFFFF" />
+                </LinearGradient>
+              </View>
+              <View style={styles.alertTypeContent}>
+                <Text style={styles.alertTypeTitle}>Motor Error</Text>
+                <Text style={styles.alertTypeDesc}>Mechanical issues detected</Text>
+              </View>
             </View>
-            <View style={styles.alertTypeContent}>
-              <Text style={styles.alertTypeTitle}>Motor Error</Text>
-              <Text style={styles.alertTypeDesc}>Mechanical issues detected</Text>
-            </View>
-          </View>
 
-          <View style={styles.alertTypeItem}>
-            <View style={styles.alertTypeIconContainer}>
-              <LinearGradient
-                colors={['#6366f1', '#4f46e5']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={styles.alertTypeIconGradient}
-              >
-                <Ionicons name="moon" size={20} color="#FFFFFF" />
-              </LinearGradient>
-            </View>
-            <View style={styles.alertTypeContent}>
-              <Text style={styles.alertTypeTitle}>Sleep Mode</Text>
-              <Text style={styles.alertTypeDesc}>Sleep mode activated/deactivated</Text>
+            <View style={styles.alertTypeItem}>
+              <View style={styles.alertTypeIconContainer}>
+                <LinearGradient
+                  colors={['#6366f1', '#4f46e5']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.alertTypeIconGradient}
+                >
+                  <Ionicons name="moon" size={20} color="#FFFFFF" />
+                </LinearGradient>
+              </View>
+              <View style={styles.alertTypeContent}>
+                <Text style={styles.alertTypeTitle}>Sleep Mode</Text>
+                <Text style={styles.alertTypeDesc}>Sleep mode activated/deactivated</Text>
+              </View>
             </View>
           </View>
         </View>
-      </View>
 
-      <View style={{ height: 100 }} />
-    </ScrollView>
+        <View style={{ height: 100 }} />
+      </ScrollView>
 
       {/* Detail Modal */}
       <Modal
@@ -477,10 +476,10 @@ export default function NotificationsScreen() {
                     end={{ x: 1, y: 1 }}
                     style={styles.modalIconGradient}
                   >
-                    <Ionicons 
-                      name={getNotificationIcon(selectedNotification.type)} 
-                      size={48} 
-                      color="#FFFFFF" 
+                    <Ionicons
+                      name={getNotificationIcon(selectedNotification.type)}
+                      size={48}
+                      color="#FFFFFF"
                     />
                   </LinearGradient>
                 </View>
@@ -514,8 +513,8 @@ export default function NotificationsScreen() {
                 </View>
 
                 {/* Close Button */}
-                <TouchableOpacity 
-                  style={styles.modalCloseButton} 
+                <TouchableOpacity
+                  style={styles.modalCloseButton}
                   onPress={closeDetailModal}
                   activeOpacity={0.8}
                 >

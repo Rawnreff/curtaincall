@@ -730,7 +730,7 @@ export default function ControlScreen() {
                     }}
                     keyboardType="numeric"
                     placeholder="35.0"
-                    editable={editingRules.temperature_control_enabled}
+                    editable={!sleepModeActive}
                   />
                   <Text style={styles.inputUnit}>°C</Text>
                 </View>
@@ -773,7 +773,7 @@ export default function ControlScreen() {
                     }}
                     keyboardType="numeric"
                     placeholder="80.0"
-                    editable={editingRules.humidity_control_enabled}
+                    editable={!sleepModeActive}
                   />
                   <Text style={styles.inputUnit}>%</Text>
                 </View>
@@ -816,7 +816,7 @@ export default function ControlScreen() {
                     }}
                     keyboardType="numeric"
                     placeholder="500"
-                    editable={editingRules.light_control_enabled}
+                    editable={!sleepModeActive}
                   />
                   <Text style={styles.inputUnit}>lux</Text>
                 </View>
@@ -847,7 +847,7 @@ export default function ControlScreen() {
                     }}
                     keyboardType="numeric"
                     placeholder="250"
-                    editable={editingRules.light_control_enabled}
+                    editable={!sleepModeActive}
                   />
                   <Text style={styles.inputUnit}>lux</Text>
                 </View>

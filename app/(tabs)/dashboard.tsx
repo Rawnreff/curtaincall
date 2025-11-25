@@ -702,9 +702,9 @@ const styles = StyleSheet.create({
   },
   cardIcon: {
     position: 'absolute',
-    right: 16,
+    right: 18,
     top: 16,
-    opacity: 0.3,
+    opacity: 0.5,
   },
   iconText: {
     fontSize: 40,
