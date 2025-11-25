@@ -75,4 +75,31 @@ export const authService = {
   setToken(token: string | null): void {
     setApiToken(token);
   },
+
+  async updateProfile(name: string, email: string): Promise<{ user: any }> {
+    try {
+      console.log('📝 Updating profile:', { name, email });
+      const response = await api.put('/users/profile', { name, email });
+      console.log('✅ Profile updated:', response.data);
+      return response.data;
+    } catch (error: any) {
+      console.error('❌ Update profile error:', error);
+      throw error;
+    }
+  },
+
+  async changePassword(currentPassword: string, newPassword: string): Promise<{ message: string }> {
+    try {
+      console.log('🔐 Changing password...');
+      const response = await api.put('/users/change-password', {
+        current_password: currentPassword,
+        new_password: newPassword
+      });
+      console.log('✅ Password changed:', response.data);
+      return response.data;
+    } catch (error: any) {
+      console.error('❌ Change password error:', error);
+      throw error;
+    }
+  },
 };

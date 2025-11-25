@@ -5,17 +5,17 @@ import { Platform } from 'react-native';
  * Semua konfigurasi IP address dan network settings ada di sini
  */
 
-// ⚙️ KONFIGURASI IP ADDRESS
+// KONFIGURASI IP ADDRESS
 // Ganti dengan IP address komputer/server Anda
-const BACKEND_IP = '10.218.16.75'; // IP address backend Flask
+const BACKEND_IP = '10.207.88.38'; // IP address backend Flask
 const BACKEND_PORT = 5000; // Port backend Flask
-const MQTT_BROKER_IP = '10.218.16.75'; // IP address MQTT broker
+const MQTT_BROKER_IP = '10.207.88.38'; // IP address MQTT broker
 const MQTT_BROKER_PORT = 1883; // Port MQTT broker
 
-// ⚙️ FORCE PHYSICAL DEVICE MODE
+// FORCE PHYSICAL DEVICE MODE
 // Set ke true jika menggunakan physical device (Android/iOS)
 // Set ke false untuk menggunakan auto-detect (emulator/simulator)
-const FORCE_PHYSICAL_DEVICE = true; // ⚙️ UBAH INI JIKA PERLU
+const FORCE_PHYSICAL_DEVICE = true; // UBAH INI JIKA PERLU
 
 /**
  * Get API Base URL berdasarkan platform

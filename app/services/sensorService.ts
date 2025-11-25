@@ -1,11 +1,11 @@
 import api from './api';
 
 interface SensorData {
-  suhu: number;
-  kelembapan: number;
-  cahaya: number;
-  posisi: string;
-  status_tirai: string;
+  temperature: number;
+  humidity: number;
+  light: number;
+  position: string;
+  curtain_status: string;
   timestamp: string;
 }
 

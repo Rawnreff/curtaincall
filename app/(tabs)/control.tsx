@@ -35,8 +35,8 @@ export default function ControlScreen() {
   // Helper function to safely determine if auto mode is active
   const isAutoMode = () => {
     // Handle edge cases: undefined, null, or unexpected values
-    if (!sensorData?.status_tirai) return false;
-    return sensorData.status_tirai === 'Auto';
+    if (!sensorData?.curtain_status) return false;
+    return sensorData.curtain_status === 'Auto';
   };
 
   useEffect(() => {
@@ -275,19 +275,19 @@ export default function ControlScreen() {
 
   const getModeIcon = () => {
     if (sleepModeActive) return '🌙';
-    if (sensorData?.status_tirai === 'Auto') return '🤖';
+    if (sensorData?.curtain_status === 'Auto') return '🤖';
     return '👤';
   };
 
   const getModeColor = (): [string, string] => {
     if (sleepModeActive) return ['#6366f1', '#4f46e5']; // Purple for sleep mode
-    if (sensorData?.status_tirai === 'Auto') return ['#10b981', '#059669']; // Green for auto
+    if (sensorData?.curtain_status === 'Auto') return ['#10b981', '#059669']; // Green for auto
     return ['#667eea', '#764ba2']; // Blue for manual
   };
 
   const getCurrentMode = () => {
     if (sleepModeActive) return 'Sleep Mode';
-    return sensorData?.status_tirai || 'Loading...';
+    return sensorData?.curtain_status || 'Loading...';
   };
 
   return (
@@ -338,28 +338,53 @@ export default function ControlScreen() {
         </LinearGradient>
       </View>
 
-      {/* Current Mode Card */}
+      {/* Current Mode Card - Enhanced Modern Design */}
       <View style={styles.currentModeCard}>
-        <LinearGradient
-          colors={getModeColor()}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={styles.modeCardGradient}
-        >
-          <View style={styles.modeCardContent}>
-            <View style={styles.modeIconContainer}>
-              <Text style={styles.modeIcon}>{getModeIcon()}</Text>
+        <View style={styles.modeCardWrapper}>
+          {/* Background Gradient */}
+          <LinearGradient
+            colors={getModeColor()}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.modeCardGradient}
+          >
+            {/* Decorative Elements */}
+            <View style={styles.modeDecorativeCircle1} />
+            <View style={styles.modeDecorativeCircle2} />
+            
+            <View style={styles.modeCardContent}>
+              {/* Icon with Glow Effect */}
+              <View style={styles.modeIconWrapper}>
+                <View style={styles.modeIconGlow} />
+                <View style={styles.modeIconContainer}>
+                  <Text style={styles.modeIcon}>{getModeIcon()}</Text>
+                </View>
+              </View>
+              
+              {/* Mode Info */}
+              <View style={styles.modeInfo}>
+                <View style={styles.modeLabelContainer}>
+                  <Text style={styles.modeLabel}>Current Mode</Text>
+                  <View style={styles.modeStatusPill}>
+                    <View style={styles.modeStatusDotPulse} />
+                    <View style={styles.modeStatusDot} />
+                    <Text style={styles.modeStatusText}>Active</Text>
+                  </View>
+                </View>
+                <Text style={styles.modeValue}>{getCurrentMode()}</Text>
+                
+                {/* Mode Description */}
+                <Text style={styles.modeDescription}>
+                  {sleepModeActive 
+                    ? 'All automation disabled for rest' 
+                    : sensorData?.curtain_status === 'Auto'
+                    ? 'Smart automation is controlling your curtain'
+                    : 'You have full manual control'}
+                </Text>
+              </View>
             </View>
-            <View style={styles.modeInfo}>
-              <Text style={styles.modeLabel}>Current Mode</Text>
-              <Text style={styles.modeValue}>{getCurrentMode()}</Text>
-            </View>
-          </View>
-          <View style={styles.modeStatusIndicator}>
-            <View style={styles.modeStatusDot} />
-            <Text style={styles.modeStatusText}>Active</Text>
-          </View>
-        </LinearGradient>
+          </LinearGradient>
+        </View>
       </View>
 
       {/* Curtain Position Status */}
@@ -369,7 +394,7 @@ export default function ControlScreen() {
           <View style={styles.curtainVisual}>
             <LinearGradient
               colors={
-                sensorData?.posisi === 'Terbuka' 
+                sensorData?.position === 'Open' 
                   ? ['#10b981', '#059669']  // Green when open
                   : ['#f5576c', '#f093fb']  // Red when closed
               }
@@ -377,17 +402,17 @@ export default function ControlScreen() {
               end={{ x: 0, y: 1 }}
               style={[
                 styles.curtainBar,
-                { height: sensorData?.posisi === 'Terbuka' ? '100%' : '15%' }
+                { height: sensorData?.position === 'Open' ? '100%' : '15%' }
               ]}
             />
           </View>
           <View style={styles.positionInfo}>
-            <Text style={styles.positionValue}>{sensorData?.posisi || 'Unknown'}</Text>
+            <Text style={styles.positionValue}>{sensorData?.position || 'Unknown'}</Text>
             <Text style={[
               styles.positionPercent,
-              { color: sensorData?.posisi === 'Terbuka' ? '#10b981' : '#f5576c' }
+              { color: sensorData?.position === 'Open' ? '#10b981' : '#f5576c' }
             ]}>
-              {sensorData?.posisi === 'Terbuka' ? '100% Open' : 'Closed'}
+              {sensorData?.position === 'Open' ? '100% Open' : 'Curtain Closed'}
             </Text>
           </View>
         </View>
@@ -407,7 +432,7 @@ export default function ControlScreen() {
             mode="manual"
             action="open"
             colors={['#10b981', '#059669']}
-            disabled={sleepModeActive || sensorData?.posisi === 'Terbuka'}
+            disabled={sleepModeActive || sensorData?.position === 'Open'}
           />
           <ControlButton
             title="Close Curtain"
@@ -415,7 +440,7 @@ export default function ControlScreen() {
             mode="manual"
             action="close"
             colors={['#fa709a', '#fee140']}
-            disabled={sleepModeActive || sensorData?.posisi === 'Tertutup'}
+            disabled={sleepModeActive || sensorData?.position === 'Close'}
           />
         </View>
 
@@ -1000,21 +1025,59 @@ const styles = StyleSheet.create({
   currentModeCard: {
     marginHorizontal: 20,
     marginBottom: 24,
-    borderRadius: 24,
+  },
+  modeCardWrapper: {
+    borderRadius: 28,
     overflow: 'hidden',
     shadowColor: '#667eea',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.25,
-    shadowRadius: 20,
-    elevation: 10,
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.35,
+    shadowRadius: 24,
+    elevation: 12,
   },
   modeCardGradient: {
-    padding: 24,
+    padding: 28,
+    paddingVertical: 32,
+    position: 'relative',
+    minHeight: 180,
+  },
+  modeDecorativeCircle1: {
+    position: 'absolute',
+    width: 150,
+    height: 150,
+    borderRadius: 75,
+    backgroundColor: 'rgba(255, 255, 255, 0.12)',
+    top: -50,
+    right: -40,
+  },
+  modeDecorativeCircle2: {
+    position: 'absolute',
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    bottom: -30,
+    left: -20,
   },
   modeCardContent: {
     flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 16,
+    alignItems: 'flex-start',
+    position: 'relative',
+    zIndex: 1,
+  },
+  modeIconWrapper: {
+    position: 'relative',
+    marginRight: 20,
+  },
+  modeIconGlow: {
+    position: 'absolute',
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: 'rgba(255, 255, 255, 0.3)',
+    top: -8,
+    left: -8,
+    opacity: 0.6,
   },
   modeIconContainer: {
     width: 64,
@@ -1023,7 +1086,8 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 255, 255, 0.25)',
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 16,
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.4)',
   },
   modeIcon: {
     fontSize: 32,
@@ -1031,39 +1095,64 @@ const styles = StyleSheet.create({
   modeInfo: {
     flex: 1,
   },
-  modeLabel: {
-    fontSize: 14,
-    color: 'rgba(255, 255, 255, 0.9)',
-    fontWeight: '600',
-    marginBottom: 4,
-    letterSpacing: 0.3,
-  },
-  modeValue: {
-    fontSize: 24,
-    fontWeight: '800',
-    color: '#FFFFFF',
-    letterSpacing: -0.5,
-  },
-  modeStatusIndicator: {
+  modeLabelContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    alignSelf: 'flex-start',
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 20,
+    justifyContent: 'space-between',
+    marginBottom: 8,
   },
-  modeStatusDot: {
+  modeLabel: {
+    fontSize: 13,
+    color: 'rgba(255, 255, 255, 0.85)',
+    fontWeight: '600',
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+  },
+  modeStatusPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.25)',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    gap: 6,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
+  },
+  modeStatusDotPulse: {
+    position: 'absolute',
     width: 8,
     height: 8,
     borderRadius: 4,
     backgroundColor: '#FFFFFF',
-    marginRight: 8,
+    left: 10,
+    opacity: 0.5,
+  },
+  modeStatusDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#FFFFFF',
   },
   modeStatusText: {
-    fontSize: 13,
+    fontSize: 11,
     fontWeight: '700',
     color: '#FFFFFF',
+    letterSpacing: 0.5,
+  },
+  modeValue: {
+    fontSize: 28,
+    fontWeight: '900',
+    color: '#FFFFFF',
+    letterSpacing: -1,
+    marginBottom: 8,
+  },
+  modeDescription: {
+    fontSize: 14,
+    color: 'rgba(255, 255, 255, 0.9)',
+    fontWeight: '500',
+    lineHeight: 20,
+    letterSpacing: 0.2,
   },
   sleepModeCard: {
     marginHorizontal: 20,
