@@ -86,34 +86,34 @@ def update_curtain_data(intent, preserve_sensors=True):
             'updated_at': datetime.now(WIB)
         }
         
-        # Map intent to posisi field
+        # Map intent to position field
         if intent == "BUKA":
-            update_data['posisi'] = 'Terbuka'
+            update_data['position'] = 'Open'
         elif intent == "TUTUP":
-            update_data['posisi'] = 'Tertutup'
+            update_data['position'] = 'Close'
         else:
             print(f"⚠️ Invalid intent: {intent}")
             return False
         
-        # Preserve status_tirai field (don't change Auto/Manual mode)
-        if current_data and 'status_tirai' in current_data:
-            update_data['status_tirai'] = current_data['status_tirai']
+        # Preserve curtain_status field (don't change Auto/Manual mode)
+        if current_data and 'curtain_status' in current_data:
+            update_data['curtain_status'] = current_data['curtain_status']
         else:
-            update_data['status_tirai'] = 'Manual'
+            update_data['curtain_status'] = 'Manual'
         
         # Preserve sensor data if exists and preserve_sensors is True
         if preserve_sensors and current_data:
-            if 'suhu' in current_data:
-                update_data['suhu'] = current_data['suhu']
-            if 'kelembapan' in current_data:
-                update_data['kelembapan'] = current_data['kelembapan']
-            if 'cahaya' in current_data:
-                update_data['cahaya'] = current_data['cahaya']
+            if 'temperature' in current_data:
+                update_data['temperature'] = current_data['temperature']
+            if 'humidity' in current_data:
+                update_data['humidity'] = current_data['humidity']
+            if 'light' in current_data:
+                update_data['light'] = current_data['light']
         else:
             # Set default values if no current data exists
-            update_data['suhu'] = 0.0
-            update_data['kelembapan'] = 0.0
-            update_data['cahaya'] = 0
+            update_data['temperature'] = 0.0
+            update_data['humidity'] = 0.0
+            update_data['light'] = 0
         
         # Upsert the data
         result = curtain_data_collection.update_one(
@@ -122,7 +122,7 @@ def update_curtain_data(intent, preserve_sensors=True):
             upsert=True
         )
         
-        print(f"✅ Curtain data updated: posisi={update_data['posisi']}")
+        print(f"✅ Curtain data updated: position={update_data['position']}")
         return True
         
     except Exception as e:
