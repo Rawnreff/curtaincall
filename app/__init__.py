@@ -219,11 +219,19 @@ def handle_rules_request(message):
         import traceback
         traceback.print_exc()
 
+# Global variable to track last auto action to prevent duplicates
+_last_auto_action = {
+    'action': None,
+    'reason': None,
+    'timestamp': None
+}
+
 def handle_auto_action_message(message):
     """Handle auto mode action message from ESP32"""
     try:
         import json
         from app.models.sensor_model import create_notification
+        from datetime import datetime, timedelta, timezone
         
         # Parse the message
         data = json.loads(message)
@@ -234,6 +242,25 @@ def handle_auto_action_message(message):
         humidity = data.get('humidity', 0)
         light_level = data.get('light_level', 0)
         threshold = data.get('threshold', 0)
+        
+        # Check for duplicate within 2 seconds
+        WIB = timezone(timedelta(hours=7))
+        current_time = datetime.now(WIB)
+        
+        global _last_auto_action
+        if (_last_auto_action['action'] == action and 
+            _last_auto_action['reason'] == reason and 
+            _last_auto_action['timestamp'] is not None):
+            
+            time_diff = (current_time - _last_auto_action['timestamp']).total_seconds()
+            if time_diff < 2:  # Within 2 seconds
+                print(f"⚠️ Duplicate auto action detected, skipping notification (time_diff={time_diff}s)")
+                return
+        
+        # Update last action
+        _last_auto_action['action'] = action
+        _last_auto_action['reason'] = reason
+        _last_auto_action['timestamp'] = current_time
         
         # Determine action description
         action_text = "opening" if action == "open" else "closing"

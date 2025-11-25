@@ -54,13 +54,30 @@ def save_sensor_data(data):
         # Check thresholds and trigger alerts
         check_sensor_thresholds(data)
         
-        # Auto mode logic
-        print(f"🔍 Status tirai: {data['status_tirai']}")
-        if data['status_tirai'] == 'Auto':
-            print("🤖 Auto mode is enabled, checking conditions...")
-            handle_auto_mode(data)
-        else:
-            print("⚠️ Auto mode is disabled, skipping auto mode logic")
+        # ═══════════════════════════════════════════════════════════════
+        # NOTE: Auto mode logic is now handled ENTIRELY by ESP32
+        # ═══════════════════════════════════════════════════════════════
+        # The ESP32 has real-time sensor access and implements priority-based
+        # auto mode logic (temperature > humidity > light). When ESP32 triggers
+        # an auto action, it publishes detailed data to /curtain/auto_action,
+        # which is handled by handle_auto_action_message() in __init__.py to
+        # create notifications.
+        #
+        # Previously, this backend also ran auto mode logic, which caused:
+        # 1. ESP32 detects condition → executes → publishes auto_action → notification created
+        # 2. Backend detects same condition → sends MQTT → ESP32 executes again → 
+        #    publishes auto_action again → DUPLICATE notification created
+        #
+        # Fix: Disable backend auto mode logic to prevent duplicates
+        # ═══════════════════════════════════════════════════════════════
+        
+        # Auto mode logic - DISABLED (handled by ESP32)
+        # print(f"🔍 Status tirai: {data['status_tirai']}")
+        # if data['status_tirai'] == 'Auto':
+        #     print("🤖 Auto mode is enabled, checking conditions...")
+        #     handle_auto_mode(data)  # DISABLED - causes duplicate notifications
+        # else:
+        #     print("⚠️ Auto mode is disabled, skipping auto mode logic")
         
         # Upsert to current data collection
         result = sensor_data_collection.update_one(
@@ -135,7 +152,15 @@ def check_sensor_thresholds(data):
         send_mqtt_command({'alert': 'buzzer', 'reason': 'high_temperature'})
 
 def handle_auto_mode(data):
-    """Handle automatic curtain control based on light sensor using user-defined rules"""
+    """Handle automatic curtain control based on light sensor using user-defined rules
+    
+    ⚠️ DEPRECATED - This function is no longer actively called to prevent duplicate notifications.
+    Auto mode logic is now handled entirely by ESP32 firmware.
+    
+    This function is retained for reference and potential future use (e.g., validation, logging),
+    but the actual auto mode control is done by ESP32 which has real-time sensor access and
+    implements priority-based logic.
+    """
     try:
         light_level = data['cahaya']
         current_position = data['posisi']
@@ -158,23 +183,13 @@ def handle_auto_mode(data):
             # Too bright, close curtain
             print(f"🌞 Too bright! Closing curtain ({light_level} > {light_close_threshold})")
             send_mqtt_command({'mode': 'auto', 'action': 'close'})
-            create_notification(
-                type='auto_mode',
-                title='Auto Mode Action',
-                message=f'Curtain closing automatically due to high light level ({light_level} lux > {light_close_threshold} lux)',
-                priority='low'
-            )
+            # Note: Notification is created by handle_auto_action_message() when ESP32 sends enhanced action message
             
         elif light_level < light_open_threshold and current_position != 'Terbuka':
             # Too dark, open curtain
             print(f"🌙 Too dark! Opening curtain ({light_level} < {light_open_threshold})")
             send_mqtt_command({'mode': 'auto', 'action': 'open'})
-            create_notification(
-                type='auto_mode',
-                title='Auto Mode Action',
-                message=f'Curtain opening automatically due to low light level ({light_level} lux < {light_open_threshold} lux)',
-                priority='low'
-            )
+            # Note: Notification is created by handle_auto_action_message() when ESP32 sends enhanced action message
         else:
             print(f"✅ Light level OK, no action needed")
             
