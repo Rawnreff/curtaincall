@@ -203,17 +203,17 @@ export default function VoiceButton({ onPress, accessibilityLabel = 'Voice Comma
       });
       const data = await res.json();
       console.log('[uploadAudioBlob] response:', data);
-      
+
       if (data && data.text) {
         setInputText(data.text);
-        
+
         // Check if command was successful and saved to database
         if (data.status === 'success' && data.database_updated) {
           const action = data.prediksi === 'BUKA' ? 'Opening' : 'Closing';
           setCommandResult(`${action} curtain...`);
           setStatusText(`Command: "${data.text}"`);
           setCommandError(null);
-          
+
           // Auto-close after 2 seconds
           setTimeout(() => {
             setShowModal(false);
@@ -225,13 +225,13 @@ export default function VoiceButton({ onPress, accessibilityLabel = 'Voice Comma
           setCommandError(errorMessage);
           setStatusText(`"${data.text}"`);
           setCommandResult(null);
-          
+
           // Show alert for invalid command
           setTimeout(() => {
             Alert.alert(
               'Invalid Command',
               errorMessage,
-              [{ text: 'OK', onPress: () => {} }]
+              [{ text: 'OK', onPress: () => { } }]
             );
           }, 500);
         }
@@ -317,17 +317,17 @@ export default function VoiceButton({ onPress, accessibilityLabel = 'Voice Comma
 
       const data = await res.json();
       console.log('[uploadLocalFile] server response', data);
-      
+
       if (data && data.text) {
         setInputText(data.text);
-        
+
         // Check if command was successful and saved to database
         if (data.status === 'success' && data.database_updated) {
           const action = data.prediksi === 'BUKA' ? 'Opening' : 'Closing';
           setCommandResult(`${action} curtain...`);
           setStatusText(`Command: "${data.text}"`);
           setCommandError(null);
-          
+
           // Auto-close after 2 seconds
           setTimeout(() => {
             setShowModal(false);
@@ -339,13 +339,13 @@ export default function VoiceButton({ onPress, accessibilityLabel = 'Voice Comma
           setCommandError(errorMessage);
           setStatusText(`"${data.text}"`);
           setCommandResult(null);
-          
+
           // Show alert for invalid command
           setTimeout(() => {
             Alert.alert(
               'Invalid Command',
               errorMessage,
-              [{ text: 'OK', onPress: () => {} }]
+              [{ text: 'OK', onPress: () => { } }]
             );
           }, 500);
         }
@@ -369,10 +369,10 @@ export default function VoiceButton({ onPress, accessibilityLabel = 'Voice Comma
   };
 
   const startRecording = async () => {
-    setStatusText('Listening...');
+    setStatusText('Recording...');
     setCommandResult(null);
     setCommandError(null);
-    
+
     // Web: prefer Web Speech API, fallback to MediaRecorder
     if (Platform.OS === 'web') {
       const SpeechRecognition = (window as any).webkitSpeechRecognition || (window as any).SpeechRecognition;
@@ -410,7 +410,7 @@ export default function VoiceButton({ onPress, accessibilityLabel = 'Voice Comma
           mr.onstop = async () => {
             const blob = new Blob(recordedChunksRef.current, { type: mediaType });
             await uploadAudioBlob(blob);
-            try { stream.getTracks().forEach((t: any) => t.stop()); } catch {}
+            try { stream.getTracks().forEach((t: any) => t.stop()); } catch { }
           };
           mediaRecorderRef.current = { recorder: mr, stream };
           mr.start();
@@ -470,7 +470,7 @@ export default function VoiceButton({ onPress, accessibilityLabel = 'Voice Comma
     setIsRecording(false);
     setLoading(true);
     setStatusText('Processing...');
-    
+
     if (Platform.OS === 'web') {
       if (recognitionRef.current) {
         try { recognitionRef.current.stop(); } catch (e) { /* ignore */ }
@@ -586,7 +586,7 @@ export default function VoiceButton({ onPress, accessibilityLabel = 'Voice Comma
                 ) : loading ? (
                   // Processing state - animated gradient with processing icon
                   <View style={styles.processingContainer}>
-                    <Animated.View 
+                    <Animated.View
                       style={[
                         styles.processingGlow,
                         {
@@ -601,7 +601,7 @@ export default function VoiceButton({ onPress, accessibilityLabel = 'Voice Comma
                             }),
                           }],
                         },
-                      ]} 
+                      ]}
                     />
                     <LinearGradient
                       colors={['#f59e0b', '#f97316']}
@@ -642,10 +642,18 @@ export default function VoiceButton({ onPress, accessibilityLabel = 'Voice Comma
             {/* Status text */}
             <Text style={[
               styles.statusText,
-              loading && styles.statusTextProcessing
+              loading && styles.statusTextProcessing,
+              isRecording && styles.statusTextRecording
             ]}>
               {statusText}
             </Text>
+            
+            {/* Recording hint */}
+            {isRecording && (
+              <Text style={styles.recordingHint}>
+                Tap to stop recording
+              </Text>
+            )}
 
             {/* Command result (if successful) */}
             {commandResult && (
@@ -664,8 +672,8 @@ export default function VoiceButton({ onPress, accessibilityLabel = 'Voice Comma
             )}
 
             {/* Close button */}
-            <TouchableOpacity 
-              style={styles.closeButton} 
+            <TouchableOpacity
+              style={styles.closeButton}
               onPress={() => { setShowModal(false); resetModal(); }}
               disabled={loading}
             >
@@ -867,6 +875,19 @@ const styles = StyleSheet.create({
   statusTextProcessing: {
     color: '#f59e0b',
     fontWeight: '700',
+  },
+  statusTextRecording: {
+    color: '#667eea',
+    fontWeight: '700',
+  },
+  recordingHint: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: '#9ca3af',
+    textAlign: 'center',
+    marginTop: -4,
+    marginBottom: 8,
+    fontStyle: 'italic',
   },
   resultContainer: {
     flexDirection: 'row',
