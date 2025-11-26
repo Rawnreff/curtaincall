@@ -120,9 +120,13 @@ def activate_sleep_mode(user_id=None):
             {
                 '$set': {
                     'sleep_mode': True,
-                    'status_tirai': 'Manual',  # Disable auto mode
-                    'posisi': 'Close',  # Will be closed by ESP32
+                    'curtain_status': 'Manual',  # Disable auto mode during sleep
+                    'position': 'Close',  # Will be closed by ESP32
                     'timestamp': datetime.now(WIB)
+                },
+                '$unset': {
+                    'status_tirai': '',  # Remove old Indonesian field
+                    'posisi': ''  # Remove old Indonesian field
                 }
             }
         )
@@ -224,8 +228,12 @@ def deactivate_sleep_mode(user_id=None):
             {
                 '$set': {
                     'sleep_mode': False,
-                    'status_tirai': 'Auto' if previous_auto_mode_state else 'Manual',
+                    'curtain_status': 'Auto' if previous_auto_mode_state else 'Manual',
                     'timestamp': datetime.now(WIB)
+                },
+                '$unset': {
+                    'status_tirai': '',  # Remove old Indonesian field
+                    'posisi': ''  # Remove old Indonesian field
                 }
             }
         )

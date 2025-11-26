@@ -234,6 +234,23 @@ def save_to_history():
         
         current_data = sensor_data_collection.find_one({'_id': 'current'})
         if current_data:
+            # Check if we already saved this exact data recently (within last 5 seconds)
+            # to prevent duplicates from race conditions
+            current_timestamp = current_data.get('timestamp')
+            if current_timestamp:
+                # Check for recent duplicate
+                recent_duplicate = sensor_history_collection.find_one({
+                    'timestamp': current_timestamp,
+                    'temperature': current_data.get('temperature'),
+                    'humidity': current_data.get('humidity'),
+                    'light': current_data.get('light'),
+                    'position': current_data.get('position')
+                })
+                
+                if recent_duplicate:
+                    print("⚠️ Duplicate history entry detected, skipping save")
+                    return
+            
             # Remove _id and create new document for history
             history_data = current_data.copy()
             history_data.pop('_id', None)
