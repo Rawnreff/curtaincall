@@ -14,6 +14,7 @@ export default function NotificationsScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [selectedNotification, setSelectedNotification] = useState<any>(null);
   const [showDetailModal, setShowDetailModal] = useState(false);
+  const [displayCount, setDisplayCount] = useState(5); // Show 5 initially
 
   // Get notification context methods
   const { refreshUnreadCount, decrementUnreadCount } = useNotifications();
@@ -27,6 +28,7 @@ export default function NotificationsScreen() {
     useCallback(() => {
       loadNotifications();
       refreshUnreadCount(); // Refresh badge count when tab is focused
+      setDisplayCount(5); // Reset to 5 notifications when returning to page
     }, [])
   );
 
@@ -43,7 +45,35 @@ export default function NotificationsScreen() {
           title: sample.title
         });
       }
-      setNotifications(data);
+      
+      // Limit to max 40 notifications
+      const top40 = data.slice(0, 40);
+      setNotifications(top40);
+      
+      // Auto-mark notifications beyond top 40 as read if they're unread
+      if (data.length > 40) {
+        const beyondTop40 = data.slice(40);
+        const unreadBeyond = beyondTop40.filter((n: any) => !n.read);
+        
+        if (unreadBeyond.length > 0) {
+          console.log(`📬 Auto-marking ${unreadBeyond.length} notifications beyond top 40 as read`);
+          
+          // Mark each unread notification as read
+          for (const notification of unreadBeyond) {
+            const notificationId = notification.id || notification._id;
+            if (notificationId) {
+              try {
+                await notificationService.markAsRead(notificationId);
+              } catch (error) {
+                console.error('Failed to auto-mark notification as read:', error);
+              }
+            }
+          }
+          
+          // Refresh unread count after auto-marking
+          await refreshUnreadCount();
+        }
+      }
     } catch (error: any) {
       console.error('Failed to load notifications:', error);
     } finally {
@@ -51,6 +81,19 @@ export default function NotificationsScreen() {
       setRefreshing(false);
     }
   };
+
+  const loadMore = () => {
+    // Increase display count by 5, max 40
+    setDisplayCount(prev => Math.min(prev + 5, 40));
+  };
+
+  const showLess = () => {
+    // Reset to 5 notifications
+    setDisplayCount(5);
+  };
+
+  const hasMore = displayCount < notifications.length && displayCount < 40;
+  const canShowLess = displayCount > 5;
 
   const onRefresh = () => {
     setRefreshing(true);
@@ -267,11 +310,60 @@ export default function NotificationsScreen() {
             </Text>
           </View>
         ) : (
-          <View style={styles.notificationsList}>
-            {notifications.map((notification, index) => (
-              <NotificationItem key={index} item={notification} />
-            ))}
-          </View>
+          <>
+            <View style={styles.notificationsList}>
+              {notifications.slice(0, displayCount).map((notification, index) => (
+                <NotificationItem key={index} item={notification} />
+              ))}
+            </View>
+
+            {/* Load More / Show Less Buttons */}
+            {(hasMore || canShowLess) && (
+              <View style={styles.loadMoreContainer}>
+                {hasMore && (
+                  <TouchableOpacity
+                    style={styles.loadMoreButton}
+                    onPress={loadMore}
+                    activeOpacity={0.8}
+                  >
+                    <LinearGradient
+                      colors={['#667eea', '#764ba2']}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 1 }}
+                      style={styles.loadMoreGradient}
+                    >
+                      <Ionicons name="chevron-down-circle" size={20} color="#FFFFFF" />
+                      <Text style={styles.loadMoreText}>
+                        Load More ({Math.min(5, notifications.length - displayCount)} more)
+                      </Text>
+                    </LinearGradient>
+                  </TouchableOpacity>
+                )}
+                
+                {canShowLess && (
+                  <TouchableOpacity
+                    style={styles.showLessButton}
+                    onPress={showLess}
+                    activeOpacity={0.8}
+                  >
+                    <LinearGradient
+                      colors={['#8F9BB3', '#B0B8C5']}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 1 }}
+                      style={styles.showLessGradient}
+                    >
+                      <Ionicons name="chevron-up-circle" size={20} color="#FFFFFF" />
+                      <Text style={styles.showLessText}>Show Less</Text>
+                    </LinearGradient>
+                  </TouchableOpacity>
+                )}
+                
+                <Text style={styles.loadMoreHint}>
+                  Showing {displayCount} of {Math.min(notifications.length, 40)} notifications
+                </Text>
+              </View>
+            )}
+          </>
         )}
 
         {/* Alert Types Info */}
@@ -918,5 +1010,62 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: '#FFFFFF',
     letterSpacing: 0.5,
+  },
+  loadMoreContainer: {
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    alignItems: 'center',
+  },
+  loadMoreButton: {
+    borderRadius: 16,
+    overflow: 'hidden',
+    shadowColor: '#667eea',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 6,
+    marginBottom: 12,
+  },
+  loadMoreGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+    paddingVertical: 14,
+    gap: 10,
+  },
+  loadMoreText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  loadMoreHint: {
+    fontSize: 13,
+    color: '#8F9BB3',
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  showLessButton: {
+    borderRadius: 16,
+    overflow: 'hidden',
+    shadowColor: '#8F9BB3',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 12,
+    elevation: 4,
+    marginTop: 2,
+    marginBottom: 24,
+  },
+  showLessGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+    paddingVertical: 14,
+    gap: 10,
+  },
+  showLessText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    letterSpacing: 0.3,
   },
 });

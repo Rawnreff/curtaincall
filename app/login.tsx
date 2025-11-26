@@ -5,7 +5,8 @@ import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from './contexts/AuthContext';
-import MaskedView from '@react-native-masked-view/masked-view';
+import { BlurView } from 'expo-blur';
+import BackgroundLayout from '../components/BackgroundLayout';
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
@@ -48,20 +49,7 @@ export default function LoginScreen() {
   };
 
   return (
-    <View style={styles.container}>
-      {/* Modern Gradient Background */}
-      <LinearGradient
-        colors={['#0F0C29', '#302B63', '#24243e']}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={styles.gradientBackground}
-      />
-
-      {/* Geometric Shapes */}
-      <View style={styles.circle1} />
-      <View style={styles.circle2} />
-      <View style={styles.square} />
-
+    <BackgroundLayout>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.keyboardView}>
         <ScrollView contentContainerStyle={[styles.scrollContent, { paddingTop: insets.top + 40 }]} showsVerticalScrollIndicator={false}>
 
@@ -76,9 +64,9 @@ export default function LoginScreen() {
             <Text style={styles.tagline}>Smart Home Control</Text>
           </View>
 
-          {/* Card Container */}
+          {/* Glassmorphism Card */}
           <View style={styles.cardWrapper}>
-            <View style={styles.card}>
+            <BlurView intensity={30} tint="dark" style={styles.glassCard}>
               <View style={styles.cardHeader}>
                 <Text style={styles.cardTitle}>Welcome Back</Text>
                 <Text style={styles.cardSubtitle}>Sign in to continue</Text>
@@ -88,39 +76,37 @@ export default function LoginScreen() {
                 {/* Email Input */}
                 <View style={styles.inputGroup}>
                   <Text style={styles.label}>EMAIL ADDRESS</Text>
-                  <View style={styles.inputWrapper}>
-                    <Ionicons name="mail-outline" size={20} color="#667eea" style={styles.inputIcon} />
+                  <View style={styles.inputContainer}>
+                    <Ionicons name="mail-outline" size={20} color="rgba(255,255,255,0.7)" style={styles.inputIcon} />
                     <TextInput
                       style={styles.input}
-                      placeholder="your@email.com"
-                      placeholderTextColor="#B0B0B0"
+                      placeholder="yourmail@mail.com"
+                      placeholderTextColor="rgba(255,255,255,0.4)"
                       value={email}
                       onChangeText={setEmail}
                       keyboardType="email-address"
                       autoCapitalize="none"
                     />
                   </View>
-                  <View style={styles.inputUnderline} />
                 </View>
 
                 {/* Password Input */}
                 <View style={styles.inputGroup}>
                   <Text style={styles.label}>PASSWORD</Text>
-                  <View style={styles.inputWrapper}>
-                    <Ionicons name="lock-closed-outline" size={20} color="#667eea" style={styles.inputIcon} />
+                  <View style={styles.inputContainer}>
+                    <Ionicons name="lock-closed-outline" size={20} color="rgba(255,255,255,0.7)" style={styles.inputIcon} />
                     <TextInput
                       style={styles.input}
                       placeholder="Enter your password"
-                      placeholderTextColor="#B0B0B0"
+                      placeholderTextColor="rgba(255,255,255,0.4)"
                       value={password}
                       onChangeText={setPassword}
                       secureTextEntry={!showPassword}
                     />
                     <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={styles.eyeButton}>
-                      <Ionicons name={showPassword ? 'eye-off-outline' : 'eye-outline'} size={20} color="#888" />
+                      <Ionicons name={showPassword ? 'eye-off-outline' : 'eye-outline'} size={20} color="rgba(255,255,255,0.6)" />
                     </TouchableOpacity>
                   </View>
-                  <View style={styles.inputUnderline} />
                 </View>
 
                 {/* Login Button */}
@@ -143,54 +129,16 @@ export default function LoginScreen() {
                   <Text style={styles.registerText}>Don't have an account? <Text style={styles.registerBold}>Sign Up</Text></Text>
                 </TouchableOpacity>
               </View>
-            </View>
+            </BlurView>
           </View>
 
         </ScrollView>
       </KeyboardAvoidingView>
-    </View>
+    </BackgroundLayout>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#0F0C29',
-  },
-  gradientBackground: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    top: 0,
-    bottom: 0,
-  },
-  circle1: {
-    position: 'absolute',
-    width: 300,
-    height: 300,
-    borderRadius: 150,
-    backgroundColor: 'rgba(102, 126, 234, 0.1)',
-    top: -100,
-    right: -100,
-  },
-  circle2: {
-    position: 'absolute',
-    width: 200,
-    height: 200,
-    borderRadius: 100,
-    backgroundColor: 'rgba(118, 75, 162, 0.1)',
-    bottom: -50,
-    left: -50,
-  },
-  square: {
-    position: 'absolute',
-    width: 150,
-    height: 150,
-    backgroundColor: 'rgba(102, 126, 234, 0.05)',
-    transform: [{ rotate: '45deg' }],
-    bottom: 200,
-    right: -75,
-  },
   keyboardView: {
     flex: 1,
   },
@@ -228,10 +176,13 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     letterSpacing: -0.5,
     marginBottom: 4,
+    textShadowColor: 'rgba(0, 0, 0, 0.3)',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 4,
   },
   tagline: {
     fontSize: 14,
-    color: '#B0B0B0',
+    color: 'rgba(255,255,255,0.7)',
     fontWeight: '500',
     letterSpacing: 1,
     textTransform: 'uppercase',
@@ -240,15 +191,13 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
   },
-  card: {
-    backgroundColor: '#FFFFFF',
+  glassCard: {
     borderRadius: 28,
     padding: 32,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 20 },
-    shadowOpacity: 0.3,
-    shadowRadius: 40,
-    elevation: 25,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
   },
   cardHeader: {
     marginBottom: 32,
@@ -256,13 +205,13 @@ const styles = StyleSheet.create({
   cardTitle: {
     fontSize: 28,
     fontWeight: '900',
-    color: '#1A1A1A',
+    color: '#FFFFFF',
     marginBottom: 8,
     letterSpacing: -0.5,
   },
   cardSubtitle: {
     fontSize: 15,
-    color: '#666',
+    color: 'rgba(255,255,255,0.6)',
     fontWeight: '500',
   },
   formSection: {
@@ -275,42 +224,42 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '800',
     color: '#667eea',
-    marginBottom: 12,
+    marginBottom: 8,
     letterSpacing: 1.2,
     textTransform: 'uppercase',
   },
-  inputWrapper: {
+  inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 8,
+    backgroundColor: 'rgba(0, 0, 0, 0.2)',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+    paddingHorizontal: 16,
+    height: 56,
   },
   inputIcon: {
     marginRight: 12,
   },
   input: {
     flex: 1,
-    fontSize: 16,
-    color: '#1A1A1A',
-    fontWeight: '600',
-    paddingVertical: 8,
+    fontSize: 14,
+    color: '#FFFFFF',
+    fontWeight: '500',
+    height: '100%',
   },
   eyeButton: {
     padding: 8,
-  },
-  inputUnderline: {
-    height: 2,
-    backgroundColor: '#E8E8E8',
-    marginTop: 4,
   },
   loginButton: {
     borderRadius: 16,
     overflow: 'hidden',
     marginTop: 8,
     shadowColor: '#667eea',
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.4,
-    shadowRadius: 20,
-    elevation: 12,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.5,
+    shadowRadius: 16,
+    elevation: 10,
   },
   loginGradient: {
     flexDirection: 'row',
@@ -333,12 +282,12 @@ const styles = StyleSheet.create({
   dividerLine: {
     flex: 1,
     height: 1,
-    backgroundColor: '#E8E8E8',
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
   },
   dividerText: {
     marginHorizontal: 16,
     fontSize: 12,
-    color: '#999',
+    color: 'rgba(255, 255, 255, 0.4)',
     fontWeight: '700',
   },
   registerButton: {
@@ -347,7 +296,7 @@ const styles = StyleSheet.create({
   },
   registerText: {
     fontSize: 14,
-    color: '#666',
+    color: 'rgba(255, 255, 255, 0.6)',
     fontWeight: '500',
   },
   registerBold: {

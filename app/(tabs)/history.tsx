@@ -15,17 +15,28 @@ export default function HistoryScreen() {
 
   useEffect(() => {
     loadHistory();
+    
+    // Auto-refresh every 30 seconds (silent refresh)
+    const interval = setInterval(() => {
+      loadHistory(true); // Silent refresh without loading indicator
+    }, 30000);
+    
+    return () => clearInterval(interval);
   }, [selectedPeriod]);
 
-  const loadHistory = async () => {
+  const loadHistory = async (silent = false) => {
     try {
-      setLoading(true);
+      if (!silent) {
+        setLoading(true);
+      }
       const data = await sensorService.getHistory(selectedPeriod);
       setHistory(data);
     } catch (error: any) {
       console.error('Failed to load history:', error);
     } finally {
-      setLoading(false);
+      if (!silent) {
+        setLoading(false);
+      }
     }
   };
 

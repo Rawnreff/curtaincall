@@ -58,6 +58,7 @@ export default function VoiceButton({ onPress, accessibilityLabel = 'Voice Comma
   const [isRecording, setIsRecording] = useState(false);
   const [statusText, setStatusText] = useState('Tap mic to record');
   const [commandResult, setCommandResult] = useState<string | null>(null);
+  const [commandError, setCommandError] = useState<string | null>(null);
   const { sendCommand } = useControl();
   const mediaRecorderRef = useRef<any>(null);
   const recognitionRef = useRef<any>(null);
@@ -186,6 +187,7 @@ export default function VoiceButton({ onPress, accessibilityLabel = 'Voice Comma
   const uploadAudioBlob = async (blob: Blob) => {
     setLoading(true);
     setStatusText('Processing...');
+    setCommandError(null);
     try {
       // Use the NLP service (port 5001) for audio processing/upload
       const nlpBase = `http://${NETWORK_CONFIG.BACKEND_IP}:5001`;
@@ -210,6 +212,7 @@ export default function VoiceButton({ onPress, accessibilityLabel = 'Voice Comma
           const action = data.prediksi === 'BUKA' ? 'Opening' : 'Closing';
           setCommandResult(`${action} curtain...`);
           setStatusText(`Command: "${data.text}"`);
+          setCommandError(null);
           
           // Auto-close after 2 seconds
           setTimeout(() => {
@@ -217,12 +220,26 @@ export default function VoiceButton({ onPress, accessibilityLabel = 'Voice Comma
             resetModal();
           }, 2000);
         } else {
-          setStatusText(data.pesan || 'Command not recognized');
+          // Command not recognized or invalid
+          const errorMessage = data.pesan || 'Command not recognized';
+          setCommandError(errorMessage);
+          setStatusText(`"${data.text}"`);
+          setCommandResult(null);
+          
+          // Show alert for invalid command
+          setTimeout(() => {
+            Alert.alert(
+              'Invalid Command',
+              errorMessage,
+              [{ text: 'OK', onPress: () => {} }]
+            );
+          }, 500);
         }
       }
     } catch (err: any) {
       console.warn('uploadAudioBlob error', err);
-      setStatusText('Upload failed. Please try again.');
+      setCommandError('Upload failed. Please try again.');
+      setStatusText('Error');
     } finally {
       setLoading(false);
     }
@@ -231,6 +248,7 @@ export default function VoiceButton({ onPress, accessibilityLabel = 'Voice Comma
   const uploadLocalFile = async (uri: string) => {
     setLoading(true);
     setStatusText('Processing...');
+    setCommandError(null);
     try {
       // Send audio uploads to the NLP service running on port 5001
       const nlpBase = `http://${NETWORK_CONFIG.BACKEND_IP}:5001`;
@@ -308,6 +326,7 @@ export default function VoiceButton({ onPress, accessibilityLabel = 'Voice Comma
           const action = data.prediksi === 'BUKA' ? 'Opening' : 'Closing';
           setCommandResult(`${action} curtain...`);
           setStatusText(`Command: "${data.text}"`);
+          setCommandError(null);
           
           // Auto-close after 2 seconds
           setTimeout(() => {
@@ -315,12 +334,26 @@ export default function VoiceButton({ onPress, accessibilityLabel = 'Voice Comma
             resetModal();
           }, 2000);
         } else {
-          setStatusText(data.pesan || 'Command not recognized');
+          // Command not recognized or invalid
+          const errorMessage = data.pesan || 'Command not recognized';
+          setCommandError(errorMessage);
+          setStatusText(`"${data.text}"`);
+          setCommandResult(null);
+          
+          // Show alert for invalid command
+          setTimeout(() => {
+            Alert.alert(
+              'Invalid Command',
+              errorMessage,
+              [{ text: 'OK', onPress: () => {} }]
+            );
+          }, 500);
         }
       }
     } catch (err: any) {
       console.warn('uploadLocalFile error', err);
-      setStatusText('Upload failed. Please try again.');
+      setCommandError('Upload failed. Please try again.');
+      setStatusText('Error');
     } finally {
       setLoading(false);
     }
@@ -330,6 +363,7 @@ export default function VoiceButton({ onPress, accessibilityLabel = 'Voice Comma
     setInputText('');
     setStatusText('Tap mic to record');
     setCommandResult(null);
+    setCommandError(null);
     setIsRecording(false);
     setLoading(false);
   };
@@ -337,6 +371,7 @@ export default function VoiceButton({ onPress, accessibilityLabel = 'Voice Comma
   const startRecording = async () => {
     setStatusText('Listening...');
     setCommandResult(null);
+    setCommandError(null);
     
     // Web: prefer Web Speech API, fallback to MediaRecorder
     if (Platform.OS === 'web') {
@@ -620,6 +655,14 @@ export default function VoiceButton({ onPress, accessibilityLabel = 'Voice Comma
               </View>
             )}
 
+            {/* Command error (if invalid) */}
+            {commandError && (
+              <View style={styles.errorContainer}>
+                <Ionicons name="close-circle" size={24} color="#ef4444" />
+                <Text style={styles.errorText}>{commandError}</Text>
+              </View>
+            )}
+
             {/* Close button */}
             <TouchableOpacity 
               style={styles.closeButton} 
@@ -839,6 +882,24 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     color: '#10b981',
+  },
+  errorContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 16,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    backgroundColor: 'rgba(239,68,68,0.08)',
+    borderRadius: 12,
+    gap: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(239,68,68,0.2)',
+  },
+  errorText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#ef4444',
+    flex: 1,
   },
   closeButton: {
     position: 'absolute',
