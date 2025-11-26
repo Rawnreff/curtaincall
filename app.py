@@ -80,17 +80,60 @@ def prediksi_intent(teks):
     pesan_balik = ""
     status = "info"
     
-    # Threshold confidence (bisa disesuaikan, misal 0.5)
-    if probabilitas < 0.5: 
-        pesan_balik = f"Kurang yakin ({int(probabilitas*100)}%), coba ulangi?"
+    # Kata kunci yang HARUS ada untuk perintah valid
+    kata_kunci_buka = ['buka', 'bukain', 'singkap', 'tarik', 'terang', 'cahaya', 'bangun', 'gelap']
+    kata_kunci_tutup = ['tutup', 'tutupin', 'silau', 'tidur', 'pergi', 'privasi', 'malam', 'rapat']
+    kata_kunci_objek = ['gorden', 'tirai', 'gordyn', 'korden']
+    
+    # Objek yang TIDAK boleh (blacklist) - hanya objek yang jelas bukan gorden
+    objek_blacklist = ['pintu', 'mulut', 'buku', 'mata', 'jendela', 'lemari', 'tv', 'televisi', 'laptop', 'hp', 'komputer', 'mobil', 'motor']
+    
+    # Perintah singkat yang diizinkan tanpa objek (hanya 1 kata)
+    perintah_singkat = ['buka', 'tutup', 'bukain', 'tutupin']
+    
+    teks_lower = teks.lower()
+    teks_words = teks_lower.split()
+    
+    # Cek apakah ada kata kunci yang relevan
+    ada_kata_buka = any(kata in teks_lower for kata in kata_kunci_buka)
+    ada_kata_tutup = any(kata in teks_lower for kata in kata_kunci_tutup)
+    ada_kata_objek = any(kata in teks_lower for kata in kata_kunci_objek)
+    ada_objek_blacklist = any(kata in teks_lower for kata in objek_blacklist)
+    
+    # Cek apakah ini perintah singkat (hanya 1 kata dari perintah_singkat)
+    is_perintah_singkat = len(teks_words) == 1 and teks_words[0] in perintah_singkat
+    
+    # Cek apakah ini perintah 2 kata dengan pola "buka/tutup + kata_lain"
+    # Untuk menangani kesalahan transkripsi seperti "tutup tilai", "buka gulai", dll
+    is_two_word_command = False
+    if len(teks_words) == 2:
+        first_word = teks_words[0]
+        # Jika kata pertama adalah perintah buka/tutup, terima perintah
+        if first_word in ['buka', 'bukain', 'tutup', 'tutupin']:
+            is_two_word_command = True
+    
+    # Threshold confidence yang lebih tinggi (0.65 atau 65%)
+    # DAN harus ada kata kunci yang relevan
+    if probabilitas < 0.65:
+        pesan_balik = f"Perintah tidak dikenali. Coba ucapkan 'buka gorden' atau 'tutup gorden'."
         status = "error"
         prediksi = "UNKNOWN"
-    elif prediksi == "BUKA":
+    elif ada_objek_blacklist:
+        # Jika ada objek yang di-blacklist, tolak perintah
+        pesan_balik = f"Perintah tidak sesuai. Sistem ini hanya untuk kontrol gorden/tirai."
+        status = "error"
+        prediksi = "UNKNOWN"
+    elif prediksi == "BUKA" and ada_kata_buka and (ada_kata_objek or is_perintah_singkat or is_two_word_command):
         pesan_balik = "Siap, membuka gorden... ☀️"
         status = "success"
-    elif prediksi == "TUTUP":
+    elif prediksi == "TUTUP" and ada_kata_tutup and (ada_kata_objek or is_perintah_singkat or is_two_word_command):
         pesan_balik = "Siap, menutup gorden... 🌑"
         status = "success"
+    else:
+        # Prediksi ada tapi tidak ada kata kunci yang relevan atau objek yang tepat
+        pesan_balik = f"Perintah tidak sesuai. Silakan ucapkan perintah yang jelas seperti 'buka gorden' atau 'tutup gorden'."
+        status = "error"
+        prediksi = "UNKNOWN"
     
     return {
         'status': status,
