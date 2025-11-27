@@ -184,6 +184,38 @@ export default function VoiceButton({ onPress, accessibilityLabel = 'Voice Comma
     };
   }, [voiceAvailable]);
 
+  // Cleanup recording on component unmount
+  useEffect(() => {
+    return () => {
+      // Cleanup expo-av recording
+      if (expoRecordingRef.current) {
+        try {
+          const rec = expoRecordingRef.current as any;
+          rec.stopAndUnloadAsync().catch(() => {});
+          expoRecordingRef.current = null;
+        } catch (e) { /* ignore */ }
+      }
+      
+      // Cleanup web speech recognition
+      if (recognitionRef.current) {
+        try { recognitionRef.current.stop(); } catch (e) { /* ignore */ }
+        recognitionRef.current = null;
+      }
+      
+      // Cleanup MediaRecorder
+      if (mediaRecorderRef.current) {
+        try {
+          const mr = mediaRecorderRef.current.recorder;
+          if (mr && mr.state !== 'inactive') mr.stop();
+          if (mediaRecorderRef.current.stream) {
+            mediaRecorderRef.current.stream.getTracks().forEach((t: any) => t.stop());
+          }
+        } catch (e) { /* ignore */ }
+        mediaRecorderRef.current = null;
+      }
+    };
+  }, []);
+
   const uploadAudioBlob = async (blob: Blob) => {
     setLoading(true);
     setStatusText('Processing...');
@@ -359,7 +391,54 @@ export default function VoiceButton({ onPress, accessibilityLabel = 'Voice Comma
     }
   };
 
-  const resetModal = () => {
+  const resetModal = async () => {
+    // Clean up any active recording before resetting
+    if (isRecording) {
+      try {
+        // Stop expo-av recording if active
+        if (expoRecordingRef.current) {
+          const rec = expoRecordingRef.current as any;
+          await rec.stopAndUnloadAsync();
+          expoRecordingRef.current = null;
+          console.log('[resetModal] Cleaned up expo-av recording');
+        }
+        
+        // Stop web speech recognition if active
+        if (recognitionRef.current) {
+          try { recognitionRef.current.stop(); } catch (e) { /* ignore */ }
+          recognitionRef.current = null;
+          console.log('[resetModal] Cleaned up web speech recognition');
+        }
+        
+        // Stop MediaRecorder if active
+        if (mediaRecorderRef.current) {
+          try {
+            const mr = mediaRecorderRef.current.recorder;
+            if (mr && mr.state !== 'inactive') {
+              mr.stop();
+            }
+            // Stop all tracks
+            if (mediaRecorderRef.current.stream) {
+              mediaRecorderRef.current.stream.getTracks().forEach((t: any) => t.stop());
+            }
+          } catch (e) { console.warn('[resetModal] MediaRecorder cleanup error', e); }
+          mediaRecorderRef.current = null;
+          console.log('[resetModal] Cleaned up MediaRecorder');
+        }
+        
+        // Stop native voice if active
+        if (voiceAvailable && Voice) {
+          try {
+            await Voice.stop();
+            console.log('[resetModal] Cleaned up native voice');
+          } catch (e) { /* ignore */ }
+        }
+      } catch (e) {
+        console.warn('[resetModal] Error cleaning up recording:', e);
+      }
+    }
+    
+    // Reset all state
     setInputText('');
     setStatusText('Tap mic to record');
     setCommandResult(null);
@@ -503,12 +582,14 @@ export default function VoiceButton({ onPress, accessibilityLabel = 'Voice Comma
         const rec = expoRecordingRef.current as any;
         await rec.stopAndUnloadAsync();
         const uri = rec.getURI();
-        expoRecordingRef.current = null;
+        expoRecordingRef.current = null;  // Clear reference immediately
         if (uri) {
           await uploadLocalFile(uri);
         }
       } catch (e: any) {
         console.warn('expo-av stop error', e);
+        // Make sure to clear the reference even on error
+        expoRecordingRef.current = null;
         Alert.alert('Recording error', e?.message || String(e));
         setLoading(false);
       }
@@ -558,7 +639,7 @@ export default function VoiceButton({ onPress, accessibilityLabel = 'Voice Comma
         </View>
       </TouchableOpacity>
       {/* Clean voice command modal */}
-      <Modal visible={showModal} transparent animationType="fade" onRequestClose={() => { setShowModal(false); resetModal(); }}>
+      <Modal visible={showModal} transparent animationType="fade" onRequestClose={async () => { await resetModal(); setShowModal(false); }}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalCard}>
             {/* Large mic button in center */}
@@ -674,7 +755,10 @@ export default function VoiceButton({ onPress, accessibilityLabel = 'Voice Comma
             {/* Close button */}
             <TouchableOpacity
               style={styles.closeButton}
-              onPress={() => { setShowModal(false); resetModal(); }}
+              onPress={async () => { 
+                await resetModal(); 
+                setShowModal(false); 
+              }}
               disabled={loading}
             >
               <Ionicons name="close" size={24} color="#9ca3af" />

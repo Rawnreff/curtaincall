@@ -270,7 +270,7 @@ export default function NotificationsScreen() {
                 style={styles.markAllGradient}
               >
                 <Ionicons name="checkmark-done" size={16} color="#FFFFFF" />
-                <Text style={styles.markAllText}>Mark All</Text>
+                <Text style={styles.markAllText}>Mark all as read</Text>
               </LinearGradient>
             </TouchableOpacity>
           )}
