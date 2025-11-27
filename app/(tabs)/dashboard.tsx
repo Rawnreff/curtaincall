@@ -335,7 +335,7 @@ export default function DashboardScreen() {
                 ) : (
                   <>
                     <Ionicons name="close-circle" size={18} color="#FFFFFF" />
-                    <Text style={styles.quickActionText}>Quick Close</Text>
+                    <Text style={styles.quickActionText}>Close</Text>
                   </>
                 )}
               </LinearGradient>
@@ -387,7 +387,7 @@ export default function DashboardScreen() {
                 ) : (
                   <>
                     <Ionicons name="arrow-up-circle" size={18} color="#FFFFFF" />
-                    <Text style={styles.quickActionText}>Quick Open</Text>
+                    <Text style={styles.quickActionText}>Open</Text>
                   </>
                 )}
               </LinearGradient>

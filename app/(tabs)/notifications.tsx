@@ -1043,6 +1043,7 @@ const styles = StyleSheet.create({
     color: '#8F9BB3',
     fontWeight: '600',
     textAlign: 'center',
+    marginTop: 12,
   },
   showLessButton: {
     borderRadius: 16,
@@ -1053,7 +1054,7 @@ const styles = StyleSheet.create({
     shadowRadius: 12,
     elevation: 4,
     marginTop: 2,
-    marginBottom: 24,
+    marginBottom: 12,
   },
   showLessGradient: {
     flexDirection: 'row',
