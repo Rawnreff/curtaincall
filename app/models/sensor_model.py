@@ -297,10 +297,30 @@ def get_sensor_history(hours=24):
         'history_timestamp': {'$gte': time_threshold_utc}
     }).sort('history_timestamp', -1).limit(1000))
 
-def create_notification(type, title, message, priority='medium'):
-    """Create notification entry"""
+def create_notification(type, title, message, priority='medium', prevent_duplicate_seconds=5):
+    """Create notification entry with enhanced duplicate prevention
+    
+    Uses both time-based and content-based duplicate detection to prevent
+    duplicate notifications from being created, even if they arrive simultaneously.
+    """
     try:
         notifications_collection = get_collection('notifications')
+        
+        # Enhanced duplicate prevention with content matching
+        if prevent_duplicate_seconds > 0:
+            time_threshold = datetime.now(WIB) - timedelta(seconds=prevent_duplicate_seconds)
+            
+            # Check if similar notification exists recently (match type, title, AND message)
+            existing = notifications_collection.find_one({
+                'type': type,
+                'title': title,
+                'message': message,  # Also match message content for stricter duplicate detection
+                'timestamp': {'$gte': time_threshold}
+            })
+            
+            if existing:
+                print(f"⚠️ Duplicate notification prevented: {title} (within {prevent_duplicate_seconds}s)")
+                return False
         
         notification = {
             'type': type,

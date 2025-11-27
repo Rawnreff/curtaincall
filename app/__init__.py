@@ -329,12 +329,13 @@ def handle_pir_action_message(client, userdata, message):
             f"Current conditions: {temperature}°C, {humidity}%, {light_level} lux"
         )
         
-        # Create notification
+        # Create notification with 30-second duplicate prevention
         create_notification(
             type='pir_motion',
             title='Motion Detected',
             message=notification_message,
-            priority='medium'
+            priority='medium',
+            prevent_duplicate_seconds=30  # Prevent duplicates within 30 seconds
         )
         
         print(f"✅ PIR notification created: {action}")
