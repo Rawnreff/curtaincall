@@ -226,6 +226,13 @@ _last_auto_action = {
     'timestamp': None
 }
 
+# Global variable to track last PIR action to prevent duplicates
+_last_pir_action = {
+    'action': None,
+    'timestamp': None,
+    'processing': False  # Lock flag to prevent concurrent processing
+}
+
 def handle_auto_action_message(message):
     """Handle auto mode action message from ESP32"""
     try:
@@ -304,48 +311,82 @@ def handle_auto_action_message(message):
         traceback.print_exc()
 
 def handle_pir_action_message(client, userdata, message):
-    """Handle PIR motion detection action messages from ESP32"""
+    """Handle PIR motion detection action messages from ESP32 with strict duplicate prevention"""
+    global _last_pir_action
+    
     try:
         import json
         from app.models.sensor_model import create_notification
+        from datetime import datetime, timedelta, timezone
         
-        # Handle both string and bytes message
-        if isinstance(message, str):
-            data = json.loads(message)
-        else:
-            data = json.loads(message.payload.decode())
+        # Check if already processing (lock mechanism)
+        if _last_pir_action['processing']:
+            print(f"⚠️ PIR action already being processed, skipping duplicate")
+            return
         
-        action = data.get('action', '')
-        temperature = data.get('temperature', 0)
-        humidity = data.get('humidity', 0)
-        light_level = data.get('light_level', 0)
+        # Set processing lock
+        _last_pir_action['processing'] = True
         
-        print(f"👁️ PIR Action received: {action} (temp={temperature}, humidity={humidity}, light={light_level})")
-        
-        # Create notification message
-        action_text = "opening" if action == "open" else "closing"
-        notification_message = (
-            f"Curtain {action_text} automatically due to motion detection. "
-            f"Current conditions: {temperature}°C, {humidity}%, {light_level} lux"
-        )
-        
-        # Create notification with 30-second duplicate prevention
-        create_notification(
-            type='pir_motion',
-            title='Motion Detected',
-            message=notification_message,
-            priority='medium',
-            prevent_duplicate_seconds=30  # Prevent duplicates within 30 seconds
-        )
-        
-        print(f"✅ PIR notification created: {action}")
+        try:
+            # Handle both string and bytes message
+            if isinstance(message, str):
+                data = json.loads(message)
+            else:
+                data = json.loads(message.payload.decode())
+            
+            action = data.get('action', '')
+            temperature = data.get('temperature', 0)
+            humidity = data.get('humidity', 0)
+            light_level = data.get('light_level', 0)
+            
+            # Check for duplicate within 3 seconds
+            WIB = timezone(timedelta(hours=7))
+            current_time = datetime.now(WIB)
+            
+            if (_last_pir_action['action'] == action and 
+                _last_pir_action['timestamp'] is not None):
+                
+                time_diff = (current_time - _last_pir_action['timestamp']).total_seconds()
+                if time_diff < 3:  # Within 3 seconds
+                    print(f"⚠️ Duplicate PIR action detected, skipping notification (time_diff={time_diff:.3f}s)")
+                    return
+            
+            # Update last action
+            _last_pir_action['action'] = action
+            _last_pir_action['timestamp'] = current_time
+            
+            print(f"👁️ PIR Action received: {action} (temp={temperature}, humidity={humidity}, light={light_level})")
+            
+            # Create notification message
+            action_text = "opening" if action == "open" else "closing"
+            notification_message = (
+                f"Curtain {action_text} automatically due to motion detection. "
+                f"Current conditions: {temperature}°C, {humidity}%, {light_level} lux"
+            )
+            
+            # Create notification (create_notification has its own duplicate prevention)
+            create_notification(
+                type='pir_motion',
+                title='Motion Detected',
+                message=notification_message,
+                priority='medium',
+                prevent_duplicate_seconds=60  # Extra long window for PIR
+            )
+            
+            print(f"✅ PIR notification processed: {action}")
+            
+        finally:
+            # Always release lock
+            _last_pir_action['processing'] = False
         
     except json.JSONDecodeError as e:
         print(f"❌ Invalid JSON in PIR action message: {e}")
+        _last_pir_action['processing'] = False
     except Exception as e:
         print(f"❌ Error handling PIR action message: {e}")
         import traceback
         traceback.print_exc()
+        _last_pir_action['processing'] = False
 
 def handle_status_request(message):
     """Handle status request from ESP32 - send current position from database"""

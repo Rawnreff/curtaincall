@@ -298,13 +298,19 @@ def get_sensor_history(hours=24):
     }).sort('history_timestamp', -1).limit(1000))
 
 def create_notification(type, title, message, priority='medium', prevent_duplicate_seconds=5):
-    """Create notification entry with enhanced duplicate prevention
+    """Create notification entry with ultra-strict duplicate prevention
     
-    Uses both time-based and content-based duplicate detection to prevent
-    duplicate notifications from being created, even if they arrive simultaneously.
+    Uses multiple strategies to prevent duplicate notifications:
+    1. Time-based + content-based matching
+    2. Immediate re-check after insert to catch race conditions
+    3. Stricter time window for PIR notifications
     """
     try:
         notifications_collection = get_collection('notifications')
+        
+        # Use stricter duplicate prevention for PIR notifications
+        if type == 'pir_motion':
+            prevent_duplicate_seconds = 60  # 1 minute for PIR to be extra safe
         
         # Enhanced duplicate prevention with content matching
         if prevent_duplicate_seconds > 0:
@@ -322,6 +328,7 @@ def create_notification(type, title, message, priority='medium', prevent_duplica
                 print(f"⚠️ Duplicate notification prevented: {title} (within {prevent_duplicate_seconds}s)")
                 return False
         
+        # Create notification
         notification = {
             'type': type,
             'title': title,
@@ -333,6 +340,23 @@ def create_notification(type, title, message, priority='medium', prevent_duplica
         }
         
         result = notifications_collection.insert_one(notification)
+        
+        # Double-check: Verify no duplicate was created in race condition
+        # Count notifications with same type, title, message in last 2 seconds
+        recent_time = datetime.now(WIB) - timedelta(seconds=2)
+        duplicate_count = notifications_collection.count_documents({
+            'type': type,
+            'title': title,
+            'message': message,
+            'timestamp': {'$gte': recent_time}
+        })
+        
+        if duplicate_count > 1:
+            # Race condition detected! Delete this notification
+            notifications_collection.delete_one({'_id': result.inserted_id})
+            print(f"⚠️ Race condition detected and resolved: Deleted duplicate {title}")
+            return False
+        
         print(f"✅ Notification created: {title} (ID: {result.inserted_id})")
         return True
     except Exception as e:
