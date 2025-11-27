@@ -34,6 +34,32 @@ test_cases = [
     {"text": "silau", "expected": "TUTUP", "description": "Konteks implisit: silau"},
     {"text": "gelap", "expected": "BUKA", "description": "Konteks implisit: gelap"},
     
+    # Konteks situasional BUKA (NEW!)
+    {"text": "bangun", "expected": "BUKA", "description": "Konteks situasional: bangun"},
+    {"text": "pagi", "expected": "BUKA", "description": "Konteks situasional: pagi"},
+    {"text": "gelap banget", "expected": "BUKA", "description": "Konteks situasional: gelap banget"},
+    {"text": "pengap", "expected": "BUKA", "description": "Konteks situasional: pengap"},
+    {"text": "butuh cahaya", "expected": "BUKA", "description": "Konteks situasional: butuh cahaya"},
+    {"text": "ruangan gelap", "expected": "BUKA", "description": "Konteks situasional: ruangan gelap"},
+    
+    # Konteks situasional TUTUP (NEW!)
+    {"text": "tidur", "expected": "TUTUP", "description": "Konteks situasional: tidur"},
+    {"text": "ngantuk", "expected": "TUTUP", "description": "Konteks situasional: ngantuk"},
+    {"text": "malam", "expected": "TUTUP", "description": "Konteks situasional: malam"},
+    {"text": "privasi", "expected": "TUTUP", "description": "Konteks situasional: privasi"},
+    {"text": "kepanasan", "expected": "TUTUP", "description": "Konteks situasional: kepanasan"},
+    {"text": "orang lewat", "expected": "TUTUP", "description": "Konteks situasional: orang lewat"},
+    
+    # Kalimat panjang dengan konteks BUKA (harus diterima)
+    {"text": "aku baru bangun nih", "expected": "BUKA", "description": "Kalimat panjang: aku baru bangun nih"},
+    {"text": "ruangan gelap banget", "expected": "BUKA", "description": "Kalimat panjang: ruangan gelap banget"},
+    {"text": "pengap banget ruanganku", "expected": "BUKA", "description": "Kalimat panjang: pengap banget ruanganku"},
+    
+    # Kalimat panjang dengan konteks TUTUP (harus diterima)
+    {"text": "aku mau tidur nih", "expected": "TUTUP", "description": "Kalimat panjang: aku mau tidur nih"},
+    {"text": "panas banget ruanganku", "expected": "TUTUP", "description": "Kalimat panjang: panas banget ruanganku"},
+    {"text": "aku ngantuk nih", "expected": "TUTUP", "description": "Kalimat panjang: aku ngantuk nih"},
+    
     # Perintah yang TIDAK boleh diterima
     {"text": "tutup pintu", "expected": "UNKNOWN", "description": "Objek salah: tutup pintu"},
     {"text": "buka jendela", "expected": "UNKNOWN", "description": "Objek salah: buka jendela"},
