@@ -541,6 +541,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     paddingHorizontal: 14,
+    paddingRight: 12,
     marginLeft: 6,
     marginBottom: 24,
     gap: 12,
@@ -725,6 +726,7 @@ const styles = StyleSheet.create({
     color: '#8F9BB3',
     fontWeight: '700',
     marginTop: 6,
+    marginBottom: 6,
   },
   section: {
     backgroundColor: '#FFFFFF',

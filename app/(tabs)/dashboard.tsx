@@ -802,7 +802,8 @@ const styles = StyleSheet.create({
   sensorGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    marginHorizontal: 20,
+    paddingHorizontal: 20,
+    paddingRight: 12,
     marginBottom: 24,
     gap: 12,
   },

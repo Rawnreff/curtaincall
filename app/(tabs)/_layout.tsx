@@ -361,11 +361,11 @@ const styles = StyleSheet.create({
     shadowColor: '#FF5252',
     shadowOffset: {
       width: 0,
-      height: 1,
+      height: 2,
     },
     shadowOpacity: 0.5,
     shadowRadius: 4,
-    elevation: 6,
+    elevation: 4,
   },
   notificationBadgeText: {
     fontSize: 10,

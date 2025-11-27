@@ -1,15 +1,10 @@
 import { Platform } from 'react-native';
 
-/**
- * Network Configuration untuk CurtainCall Frontend
- * Semua konfigurasi IP address dan network settings ada di sini
- */
-
 // KONFIGURASI IP ADDRESS
 // Ganti dengan IP address komputer/server Anda
-const BACKEND_IP = '10.204.99.38'; // IP address backend Flask
+const BACKEND_IP = '192.168.1.5'; // IP address backend Flask
 const BACKEND_PORT = 5000; // Port backend Flask
-const MQTT_BROKER_IP = '10.204.99.38'; // IP address MQTT broker
+const MQTT_BROKER_IP = '192.168.1.5'; // IP address MQTT broker
 const MQTT_BROKER_PORT = 1883; // Port MQTT broker
 
 // FORCE PHYSICAL DEVICE MODE
