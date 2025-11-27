@@ -34,26 +34,35 @@ mongo = init_mongodb(app)
 mqtt_client = init_mqtt_client()
 
 # --- 1. MEMBANGUN MODEL NLP (HARDCODED DATA) ---
-# Data latih untuk kontrol gorden
+# Data latih untuk kontrol gorden dengan variasi kesalahan transkripsi
 data_latih = [
     # --- Perintah BUKA ---
-    ("buka gorden", "BUKA"), ("buka tirai", "BUKA"), ("tolong buka", "BUKA"),
+    ("buka gorden", "BUKA"), ("buka tirai", "BUKA"), ("tolong buka", "BUKA"), ("buka en", "BUKA"),
     ("biarkan cahaya masuk", "BUKA"), ("gordennya dibuka", "BUKA"), ("bukain gordennya", "BUKA"),
     ("singkapkan tirai", "BUKA"), ("gorden buka sekarang", "BUKA"), ("buka yang lebar", "BUKA"),
     ("tarik gordennya", "BUKA"), ("buka semua", "BUKA"), ("buka sedikit gorden", "BUKA"),
     ("saya ingin lihat pemandangan", "BUKA"), ("biar terang", "BUKA"), ("aku mau terang", "BUKA"),
     ("saya sudah sampai rumah", "BUKA"), ("gelap", "BUKA"), ("selamat pagi", "BUKA"), ("saya sudah bangun", "BUKA"),
     
+    # Variasi kesalahan transkripsi untuk BUKA
+    ("buka tilai", "BUKA"), ("buka lirai", "BUKA"), ("buka gulai", "BUKA"), ("buka golden", "BUKA"),
+    ("buka gordyn", "BUKA"), ("buka korden", "BUKA"), ("bukain tilai", "BUKA"), ("bukain lirai", "BUKA"),
+    
     # --- Perintah TUTUP ---
-    ("tutup gorden", "TUTUP"), ("tutup tirai", "TUTUP"), ("silau", "TUTUP"),
+    ("tutup gorden", "TUTUP"), ("tutup tirai", "TUTUP"), ("silau", "TUTUP"), ("tutup en", "TUTUP"), ("tutuppen", "TUTUP"), ("tutup an", "TUTUP"),
     ("silau banget", "TUTUP"), ("terlalu silau", "TUTUP"), ("terlalu terang", "TUTUP"),
     ("saya mau tidur", "TUTUP"), ("aku pergi", "TUTUP"), ("tutupin gordennya", "TUTUP"),
     ("tutup sekarang", "TUTUP"), ("gelapkan ruangan", "TUTUP"), ("gordennya ditutup", "TUTUP"),
     ("tutup rapat gorden", "TUTUP"), ("saya mau privasi", "TUTUP"), ("sudah malam", "TUTUP"),
     ("tutup semua tirai", "TUTUP"), ("selamat malam", "TUTUP"), ("sudah malam", "TUTUP"),
+    
+    # Variasi kesalahan transkripsi untuk TUTUP
+    ("tutup tilai", "TUTUP"), ("tutup lirai", "TUTUP"), ("tutup lilin", "TUTUP"), ("tutup gulai", "TUTUP"),
+    ("tutup golden", "TUTUP"), ("tutup gordyn", "TUTUP"), ("tutup korden", "TUTUP"),
+    ("tutupin tilai", "TUTUP"), ("tutupin lirai", "TUTUP"), ("tutupin lilin", "TUTUP"),
 
     # --- Variasi Singkat ---
-    ("buka", "BUKA"), ("tutup", "TUTUP")
+    ("buka", "BUKA"), ("tutup", "TUTUP"), ("bukain", "BUKA"), ("tutupin", "TUTUP")
 ]
 
 # Melatih Model saat server start
@@ -85,6 +94,10 @@ def prediksi_intent(teks):
     kata_kunci_tutup = ['tutup', 'tutupin', 'silau', 'tidur', 'pergi', 'privasi', 'malam', 'rapat']
     kata_kunci_objek = ['gorden', 'tirai', 'gordyn', 'korden']
     
+    # Kata-kata yang mirip dengan "tirai" atau "gorden" (kesalahan transkripsi umum)
+    kata_mirip_tirai = ['tilai', 'tirai', 'tiray', 'tirei', 'tira', 'lirai', 'lilin', 'lira']
+    kata_mirip_gorden = ['gorden', 'gordyn', 'korden', 'gordin', 'gulai', 'golden', 'garden']
+    
     # Objek yang TIDAK boleh (blacklist) - hanya objek yang jelas bukan gorden
     objek_blacklist = ['pintu', 'mulut', 'buku', 'mata', 'jendela', 'lemari', 'tv', 'televisi', 'laptop', 'hp', 'komputer', 'mobil', 'motor']
     
@@ -98,6 +111,8 @@ def prediksi_intent(teks):
     ada_kata_buka = any(kata in teks_lower for kata in kata_kunci_buka)
     ada_kata_tutup = any(kata in teks_lower for kata in kata_kunci_tutup)
     ada_kata_objek = any(kata in teks_lower for kata in kata_kunci_objek)
+    ada_kata_mirip_tirai = any(kata in teks_lower for kata in kata_mirip_tirai)
+    ada_kata_mirip_gorden = any(kata in teks_lower for kata in kata_mirip_gorden)
     ada_objek_blacklist = any(kata in teks_lower for kata in objek_blacklist)
     
     # Cek apakah ini perintah singkat (hanya 1 kata dari perintah_singkat)
@@ -108,13 +123,16 @@ def prediksi_intent(teks):
     is_two_word_command = False
     if len(teks_words) == 2:
         first_word = teks_words[0]
+        second_word = teks_words[1]
         # Jika kata pertama adalah perintah buka/tutup, terima perintah
         if first_word in ['buka', 'bukain', 'tutup', 'tutupin']:
-            is_two_word_command = True
+            # Terima jika kata kedua mirip dengan tirai/gorden atau bukan blacklist
+            if second_word in kata_mirip_tirai or second_word in kata_mirip_gorden or second_word not in objek_blacklist:
+                is_two_word_command = True
     
-    # Threshold confidence yang lebih tinggi (0.65 atau 65%)
+    # Threshold confidence yang lebih rendah (0.5 atau 50%) untuk lebih toleran
     # DAN harus ada kata kunci yang relevan
-    if probabilitas < 0.65:
+    if probabilitas < 0.5:
         pesan_balik = f"Perintah tidak dikenali. Coba ucapkan 'buka gorden' atau 'tutup gorden'."
         status = "error"
         prediksi = "UNKNOWN"
@@ -123,14 +141,34 @@ def prediksi_intent(teks):
         pesan_balik = f"Perintah tidak sesuai. Sistem ini hanya untuk kontrol gorden/tirai."
         status = "error"
         prediksi = "UNKNOWN"
-    elif prediksi == "BUKA" and ada_kata_buka and (ada_kata_objek or is_perintah_singkat or is_two_word_command):
-        pesan_balik = "Siap, membuka gorden... ☀️"
-        status = "success"
-    elif prediksi == "TUTUP" and ada_kata_tutup and (ada_kata_objek or is_perintah_singkat or is_two_word_command):
-        pesan_balik = "Siap, menutup gorden... 🌑"
-        status = "success"
+    elif prediksi == "BUKA" and ada_kata_buka:
+        # Terima jika:
+        # 1. Ada kata objek yang tepat (gorden/tirai)
+        # 2. Perintah singkat (hanya "buka")
+        # 3. Perintah 2 kata (buka + apapun yang bukan blacklist)
+        # 4. Ada kata mirip tirai/gorden (toleransi kesalahan transkripsi)
+        if ada_kata_objek or is_perintah_singkat or is_two_word_command or ada_kata_mirip_tirai or ada_kata_mirip_gorden:
+            pesan_balik = "Siap, membuka gorden... ☀️"
+            status = "success"
+        else:
+            pesan_balik = f"Perintah tidak sesuai. Silakan ucapkan 'buka gorden' atau 'buka tirai'."
+            status = "error"
+            prediksi = "UNKNOWN"
+    elif prediksi == "TUTUP" and ada_kata_tutup:
+        # Terima jika:
+        # 1. Ada kata objek yang tepat (gorden/tirai)
+        # 2. Perintah singkat (hanya "tutup")
+        # 3. Perintah 2 kata (tutup + apapun yang bukan blacklist)
+        # 4. Ada kata mirip tirai/gorden (toleransi kesalahan transkripsi)
+        if ada_kata_objek or is_perintah_singkat or is_two_word_command or ada_kata_mirip_tirai or ada_kata_mirip_gorden:
+            pesan_balik = "Siap, menutup gorden... 🌑"
+            status = "success"
+        else:
+            pesan_balik = f"Perintah tidak sesuai. Silakan ucapkan 'tutup gorden' atau 'tutup tirai'."
+            status = "error"
+            prediksi = "UNKNOWN"
     else:
-        # Prediksi ada tapi tidak ada kata kunci yang relevan atau objek yang tepat
+        # Prediksi ada tapi tidak ada kata kunci yang relevan
         pesan_balik = f"Perintah tidak sesuai. Silakan ucapkan perintah yang jelas seperti 'buka gorden' atau 'tutup gorden'."
         status = "error"
         prediksi = "UNKNOWN"
@@ -244,17 +282,17 @@ def proses_audio():
              return jsonify({'status': 'error', 'message': 'File audio kosong'}), 400
 
         # 3. Upload ke Gemini
-        print("🤖 [proses_audio] Mengunggah file ke Gemini...")
+        print("🤖 [proses_audio] Mengunggah file...")
         gemini_file = genai.upload_file(save_path, mime_type="audio/mpeg")
 
         # Menggunakan model yang TERSEDIA di daftar Anda (2.0 Flash)
         try:
-            model_name = "models/gemini-2.0-flash" 
-            print(f"✨ Menggunakan model: {model_name}")
+            model_name = "models/gemini-2.5-flash" 
+            print(f"✨ Menggunakan model: Speech-to-Text")
             model_gemini = genai.GenerativeModel(model_name)
         except Exception as e:
             print(f"⚠️ Gagal memuat model utama, mencoba fallback: {e}")
-            model_gemini = genai.GenerativeModel("models/gemini-2.0-flash-lite")
+            model_gemini = genai.GenerativeModel("models/gemini-2.5-flash-lite")
 
         # 4. Minta Transkripsi
         print("🤖 [proses_audio] Meminta transkripsi...")
